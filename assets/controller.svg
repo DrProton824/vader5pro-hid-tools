@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Flydigi Vader 5 Pro – schematic controller illustration.
+  Original artwork for vader-remapper project (MIT License).
+  Not derived from or copied from Flydigi Space Station.
+-->
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 860 580"
+  width="860"
+  height="580"
+  font-family="Segoe UI, Arial, sans-serif"
+>
+  <!-- ── Background ─────────────────────────────────────────────── -->
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="45%" r="60%">
+      <stop offset="0%"   stop-color="#1e2a3a"/>
+      <stop offset="100%" stop-color="#0d1117"/>
+    </radialGradient>
+    <radialGradient id="bodyGrad" cx="50%" cy="40%" r="55%">
+      <stop offset="0%"   stop-color="#1c2330"/>
+      <stop offset="100%" stop-color="#111820"/>
+    </radialGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.6"/>
+    </filter>
+    <filter id="btnShadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <rect width="860" height="580" fill="url(#bgGrad)" rx="16"/>
+
+  <!-- ── Controller body ────────────────────────────────────────── -->
+  <!--
+    The body is a single path: wide top section that narrows into
+    two grip handles at the bottom, matching the Vader 5 Pro silhouette.
+  -->
+  <path
+    d="
+      M 180,140
+      Q 180,100 430,95
+      Q 680,100 680,140
+      L 710,320
+      Q 730,420 700,470
+      Q 670,510 620,510
+      L 560,510
+      Q 530,510 510,490
+      L 490,465
+      Q 470,445 430,445
+      Q 390,445 370,465
+      L 350,490
+      Q 330,510 300,510
+      L 240,510
+      Q 190,510 160,470
+      Q 130,420 150,320
+      Z
+    "
+    fill="url(#bodyGrad)"
+    stroke="#2a3a50"
+    stroke-width="2"
+    filter="url(#shadow)"
+  />
+
+  <!-- Decorative V-stripe -->
+  <path
+    d="M 350,130 L 430,230 L 510,130"
+    fill="none"
+    stroke="#1a3050"
+    stroke-width="18"
+    stroke-linejoin="round"
+    opacity="0.7"
+  />
+
+  <!-- ── Macro buttons: M1 M2 M3 M4 (bottom center) ────────────── -->
+  <!-- M2 – bottom left, upper row -->
+  <g id="btn-M2" class="mappable" data-button="M2">
+    <path d="M 270,450 L 360,450 Q 368,450 372,458 L 380,475 Q 384,483 376,487 L 270,487 Q 262,487 258,479 L 258,458 Q 258,450 270,450 Z"
+          fill="#1a2535" stroke="#3a5070" stroke-width="1.5" filter="url(#btnShadow)"/>
+    <text x="319" y="473" text-anchor="middle" fill="#8ab0d0" font-size="15" font-weight="600">M2</text>
+  </g>
+
+  <!-- M1 – bottom right, upper row -->
+  <g id="btn-M1" class="mappable" data-button="M1">
+    <path d="M 590,450 L 480,450 Q 472,450 468,458 L 460,475 Q 456,483 464,487 L 590,487 Q 598,487 602,479 L 602,458 Q 602,450 590,450 Z"
+          fill="#1a2535" stroke="#3a5070" stroke-width="1.5" filter="url(#btnShadow)"/>
+    <text x="531" y="473" text-anchor="middle" fill="#8ab0d0" font-size="15" font-weight="600">M1</text>
+  </g>
+
+  <!-- M4 – bottom left, lower row -->
+  <g id="btn-M4" class="mappable" data-button="M4">
+    <path d="M 255,497 L 375,497 Q 383,497 386,505 L 390,518 Q 393,526 385,530 L 255,530 Q 247,530 244,522 L 244,505 Q 244,497 255,497 Z"
+          fill="#1a2535" stroke="#3a5070" stroke-width="1.5" filter="url(#btnShadow)"/>
+    <text x="317" y="518" text-anchor="middle" fill="#8ab0d0" font-size="15" font-weight="600">M4</text>
+  </g>
+
+  <!-- M3 – bottom right, lower row -->
+  <g id="btn-M3" class="mappable" data-button="M3">
+    <path d="M 605,497 L 485,497 Q 477,497 474,505 L 470,518 Q 467,526 475,530 L 605,530 Q 613,530 616,522 L 616,505 Q 616,497 605,497 Z"
+          fill="#1a2535" stroke="#3a5070" stroke-width="1.5" filter="url(#btnShadow)"/>
+    <text x="543" y="518" text-anchor="middle" fill="#8ab0d0" font-size="15" font-weight="600">M3</text>
+  </g>
+
+  <!-- ── Shoulder buttons: LT LB LM / RT RB RM ─────────────────── -->
+  <!-- LT -->
+  <g id="btn-LT">
+    <rect x="80" y="100" width="80" height="36" rx="8"
+          fill="#1a2535" stroke="#3a5070" stroke-width="1.5" filter="url(#btnShadow)"/>
+    <text x="120" y="123" text-anchor="middle" fill="#6080a0" font-size="14">LT</text>
+  </g>
+
+  <!-- LM (mappable) -->
+  <g id="btn-LM" class="mappable" data-button="LM">
+    <rect x="170" y="100" width="80" height="36" rx="8"
+          fill="#1a2535" stroke="#3a5070" stroke-width="1.5" filter="url(#btnShadow)"/>
+    <text x="210" y="123" text-anchor="middle" fill="#8ab0d0" font-size="14" font-weight="600">LM</text>
+  </g>
+
+  <!-- LB -->
+  <g id="btn-LB">
+    <rect x="115" y="145" width="80" height="32" rx="6"
+          fill="#151e2a" stroke="#2a3a50" stroke-width="1.5"/>
+    <text x="155" y="166" text-anchor="middle" fill="#6080a0" font-size="13">LB</text>
+  </g>
+
+  <!-- RT -->
+  <g id="btn-RT">
+    <rect x="700" y="100" width="80" height="36" rx="8"
+          fill="#1a2535" stroke="#3a5070" stroke-width="1.5" filter="url(#btnShadow)"/>
+    <text x="740" y="123" text-anchor="middle" fill="#6080a0" font-size="14">RT</text>
+  </g>
+
+  <!-- RM (mappable) -->
+  <g id="btn-RM" class="mappable" data-button="RM">
+    <rect x="610" y="100" width="80" height="36" rx="8"
+          fill="#1a2535" stroke="#3a5070" stroke-width="1.5" filter="url(#btnShadow)"/>
+    <text x="650" y="123" text-anchor="middle" fill="#8ab0d0" font-size="14" font-weight="600">RM</text>
+  </g>
+
+  <!-- RB -->
+  <g id="btn-RB">
+    <rect x="665" y="145" width="80" height="32" rx="6"
+          fill="#151e2a" stroke="#2a3a50" stroke-width="1.5"/>
+    <text x="705" y="166" text-anchor="middle" fill="#6080a0" font-size="13">RB</text>
+  </g>
+
+  <!-- ── Left stick ──────────────────────────────────────────────── -->
+  <circle cx="270" cy="270" r="52" fill="#111820" stroke="#2a3a50" stroke-width="2"/>
+  <circle cx="270" cy="270" r="35" fill="#0d1520" stroke="#1a2a40" stroke-width="1.5"/>
+  <text x="270" y="275" text-anchor="middle" fill="#2a4060" font-size="11">STICK-L</text>
+
+  <!-- ── D-pad ───────────────────────────────────────────────────── -->
+  <g id="dpad">
+    <!-- Horizontal bar -->
+    <rect x="300" y="335" width="84" height="28" rx="5" fill="#151e2a" stroke="#2a3a50" stroke-width="1.5"/>
+    <!-- Vertical bar -->
+    <rect x="328" y="307" width="28" height="84" rx="5" fill="#151e2a" stroke="#2a3a50" stroke-width="1.5"/>
+    <!-- Arrows -->
+    <text x="342" y="300" text-anchor="middle" fill="#4a6a8a" font-size="14">▲</text>
+    <text x="342" y="408" text-anchor="middle" fill="#4a6a8a" font-size="14">▼</text>
+    <text x="296" y="354" text-anchor="middle" fill="#4a6a8a" font-size="14">◀</text>
+    <text x="390" y="354" text-anchor="middle" fill="#4a6a8a" font-size="14">▶</text>
+  </g>
+
+  <!-- ── Select / Start / Home ───────────────────────────────────── -->
+  <rect x="393" y="208" width="28" height="20" rx="4" fill="#151e2a" stroke="#2a3a50" stroke-width="1.5"/>
+  <text x="407" y="222" text-anchor="middle" fill="#4a6060" font-size="9">SEL</text>
+
+  <rect x="438" y="208" width="28" height="20" rx="4" fill="#151e2a" stroke="#2a3a50" stroke-width="1.5"/>
+  <text x="452" y="222" text-anchor="middle" fill="#4a6060" font-size="9">STA</text>
+
+  <!-- Home (mappable) -->
+  <g id="btn-Home" class="mappable" data-button="Home">
+    <circle cx="430" cy="175" r="16" fill="#1a2535" stroke="#3a5070" stroke-width="1.5"/>
+    <text x="430" y="180" text-anchor="middle" fill="#8ab0d0" font-size="11" font-weight="600">⌂</text>
+  </g>
+
+  <!-- ── Right stick ─────────────────────────────────────────────── -->
+  <circle cx="550" cy="355" r="52" fill="#111820" stroke="#2a3a50" stroke-width="2"/>
+  <circle cx="550" cy="355" r="35" fill="#0d1520" stroke="#1a2a40" stroke-width="1.5"/>
+  <text x="550" y="360" text-anchor="middle" fill="#2a4060" font-size="11">STICK-R</text>
+
+  <!-- ── Face buttons: Y X B A ──────────────────────────────────── -->
+  <circle cx="630" cy="235" r="22" fill="#111820" stroke="#2a3a50" stroke-width="1.5" filter="url(#btnShadow)"/>
+  <text x="630" y="241" text-anchor="middle" fill="#6080a0" font-size="14">Y</text>
+
+  <circle cx="590" cy="275" r="22" fill="#111820" stroke="#2a3a50" stroke-width="1.5" filter="url(#btnShadow)"/>
+  <text x="590" y="281" text-anchor="middle" fill="#6080a0" font-size="14">X</text>
+
+  <circle cx="670" cy="275" r="22" fill="#111820" stroke="#2a3a50" stroke-width="1.5" filter="url(#btnShadow)"/>
+  <text x="670" y="281" text-anchor="middle" fill="#6080a0" font-size="14">B</text>
+
+  <circle cx="630" cy="315" r="22" fill="#111820" stroke="#2a3a50" stroke-width="1.5" filter="url(#btnShadow)"/>
+  <text x="630" y="321" text-anchor="middle" fill="#6080a0" font-size="14">A</text>
+
+  <!-- ── Z button (mappable) ────────────────────────────────────── -->
+  <g id="btn-Z" class="mappable" data-button="Z">
+    <circle cx="690" cy="350" r="20" fill="#1a2535" stroke="#3a5070" stroke-width="1.5" filter="url(#btnShadow)"/>
+    <text x="690" y="356" text-anchor="middle" fill="#8ab0d0" font-size="14" font-weight="600">Z</text>
+  </g>
+
+  <!-- ── C / Circle button (mappable) ───────────────────────────── -->
+  <g id="btn-C" class="mappable" data-button="C">
+    <circle cx="655" cy="390" r="20" fill="#1a2535" stroke="#3a5070" stroke-width="1.5" filter="url(#btnShadow)"/>
+    <text x="655" y="396" text-anchor="middle" fill="#8ab0d0" font-size="14" font-weight="600">C</text>
+  </g>
+
+  <!-- ── Arrow button (mappable) ────────────────────────────────── -->
+  <g id="btn-Arrow" class="mappable" data-button="Arrow">
+    <circle cx="430" cy="430" r="14" fill="#1a2535" stroke="#3a5070" stroke-width="1.5"/>
+    <text x="430" y="435" text-anchor="middle" fill="#8ab0d0" font-size="11">↕</text>
+  </g>
+
+  <!-- ── Legend: mappable vs non-mappable ───────────────────────── -->
+  <rect x="30" y="540" width="12" height="12" rx="3" fill="#1a2535" stroke="#3a5070" stroke-width="1.5"/>
+  <text x="48" y="551" fill="#8ab0d0" font-size="11">Mappable (click to assign)</text>
+
+  <rect x="220" y="540" width="12" height="12" rx="3" fill="#151e2a" stroke="#2a3a50" stroke-width="1.5"/>
+  <text x="238" y="551" fill="#4a6a8a" font-size="11">XInput (handled natively)</text>
+
+</svg>

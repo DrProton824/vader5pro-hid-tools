@@ -38,12 +38,40 @@ from __future__ import annotations
 import ctypes
 import ctypes.wintypes as wt
 import pathlib
+import sys
+import traceback
 from typing import Callable, Optional
 
 user32 = ctypes.windll.user32
 shell32 = ctypes.windll.shell32
 kernel32 = ctypes.windll.kernel32
 gdi32 = ctypes.windll.gdi32
+
+# ── Debug logging ─────────────────────────────────────────────────────────────
+# The service is built with --noconsole, so stderr / exception tracebacks
+# are normally invisible. Route them to a small log file next to the exe
+# (or the repo root when running from source) so failures inside the
+# WNDPROC callback - which Windows/ctypes would otherwise swallow - are
+# actually visible instead of just showing up as "nothing happened".
+def _log_path() -> pathlib.Path:
+    try:
+        if getattr(sys, "frozen", False):
+            base = pathlib.Path(sys.executable).resolve().parent
+        else:
+            base = pathlib.Path(__file__).resolve().parents[2]
+    except Exception:
+        base = pathlib.Path(".")
+    return base / "tray_debug.log"
+
+
+def _log(message: str) -> None:
+    try:
+        with open(_log_path(), "a", encoding="utf-8") as fh:
+            fh.write(message + "\n")
+    except Exception:
+        pass
+
+# ── Win32 constants ───────────────────────────────────────────────────────────
 
 # ── Win32 constants ───────────────────────────────────────────────────────────
 
@@ -82,8 +110,18 @@ IMAGE_ICON = 1
 LR_LOADFROMFILE = 0x00000010
 LR_DEFAULTSIZE = 0x00000040
 
+# LRESULT/WPARAM/LPARAM are pointer-sized (64-bit) on x64 Windows.
+# ctypes.c_long is always 32-bit regardless of platform, so declaring
+# this callback's return type as c_long corrupts the upper 32 bits of
+# every value it returns to Windows - enough to make TrackPopupMenu's
+# internal handling of WM_MEASUREITEM/WM_DRAWITEM misbehave even though
+# the handler functions themselves run correctly.
+LRESULT = ctypes.c_ssize_t
+WPARAM = ctypes.c_size_t
+LPARAM = ctypes.c_ssize_t
+
 WNDPROC = ctypes.WINFUNCTYPE(
-    ctypes.c_long, wt.HWND, ctypes.c_uint, wt.WPARAM, wt.LPARAM
+    LRESULT, wt.HWND, ctypes.c_uint, WPARAM, LPARAM
 )
 
 
@@ -214,6 +252,9 @@ user32.RegisterClassW.restype = wt.ATOM
 kernel32.GetModuleHandleW.restype = wt.HINSTANCE
 user32.LoadImageW.restype = wt.HANDLE
 user32.LoadIconW.restype = wt.HICON
+
+user32.DefWindowProcW.argtypes = [wt.HWND, ctypes.c_uint, WPARAM, LPARAM]
+user32.DefWindowProcW.restype = LRESULT
 
 class TrayIcon:
     _CLASS_NAME = "VaderRemapperTrayWndClass"
@@ -429,19 +470,24 @@ class TrayIcon:
     # ── WndProc ──────────────────────────────────────────────────────────
 
     def _wndproc(self, hwnd, msg, wparam, lparam) -> int:
-        if msg == WM_TRAYICON:
-            if lparam in (WM_LBUTTONUP, WM_RBUTTONUP):
-                self._show_menu()
-            return 0
-        if msg == WM_MEASUREITEM:
-            self._on_measure_item(lparam)
-            return 1
-        if msg == WM_DRAWITEM:
-            self._on_draw_item(lparam)
-            return 1
-        if msg == WM_DESTROY:
-            self._remove_icon()
-            self._running = False
-            user32.PostQuitMessage(0)
-            return 0
+        try:
+            if msg == WM_TRAYICON:
+                if lparam in (WM_LBUTTONUP, WM_RBUTTONUP):
+                    self._show_menu()
+                return 0
+            if msg == WM_MEASUREITEM:
+                _log(f"WM_MEASUREITEM received, lparam={lparam}")
+                self._on_measure_item(lparam)
+                return 1
+            if msg == WM_DRAWITEM:
+                _log(f"WM_DRAWITEM received, lparam={lparam}")
+                self._on_draw_item(lparam)
+                return 1
+            if msg == WM_DESTROY:
+                self._remove_icon()
+                self._running = False
+                user32.PostQuitMessage(0)
+                return 0
+        except Exception:
+            _log("Exception in _wndproc:\n" + traceback.format_exc())
         return user32.DefWindowProcW(hwnd, msg, wparam, lparam)

@@ -82,7 +82,7 @@ def main() -> None:
     build_service()
     build_config_gui()
     copy_runtime_files()
-    print(f"\n✓ Build complete → {DIST}")
+    print(f"\nBuild complete -> {DIST}")
 
 
 if __name__ == "__main__":

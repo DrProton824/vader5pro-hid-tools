@@ -83,6 +83,7 @@ def _log(message: str) -> None:
 
 WM_DESTROY = 0x0002
 WM_NCDESTROY = 0x0082
+WM_CLOSE = 0x0010
 WM_APP = 0x8000
 WM_TRAYICON = WM_APP + 1
 WM_LBUTTONUP = 0x0202
@@ -224,6 +225,9 @@ user32.DestroyWindow.restype = wt.BOOL
 
 user32.ShowWindow.argtypes = [wt.HWND, ctypes.c_int]
 user32.ShowWindow.restype = wt.BOOL
+
+user32.SetForegroundWindow.argtypes = [wt.HWND]
+user32.SetForegroundWindow.restype = wt.BOOL
 
 user32.GetSystemMetrics.argtypes = [ctypes.c_int]
 user32.GetSystemMetrics.restype = ctypes.c_int
@@ -384,12 +388,15 @@ class _MenuPopup:
         self._hwnd = hwnd
         _menu_instances[hwnd] = self
 
-        user32.ShowWindow(hwnd, SW_SHOWNOACTIVATE)
+        user32.ShowWindow(hwnd, 1)  # SW_SHOWNORMAL
         user32.SetForegroundWindow(hwnd)
 
     def _close(self) -> None:
         if self._hwnd:
-            user32.DestroyWindow(self._hwnd)
+            hwnd = self._hwnd
+            self._hwnd = None
+            _menu_instances.pop(hwnd, None)
+            user32.DestroyWindow(hwnd)
 
     # ── Hit testing ──────────────────────────────────────────────────────
 
@@ -435,8 +442,6 @@ class _MenuPopup:
                 self._close()
             return 0
         if msg == WM_NCDESTROY:
-            _menu_instances.pop(self._hwnd, None)
-            self._hwnd = None
             return 0
         return user32.DefWindowProcW(self._hwnd, msg, wparam, lparam)
 
@@ -532,7 +537,7 @@ class TrayIcon:
     def stop(self) -> None:
         """Thread-safe: request the message loop to exit."""
         if self._hwnd:
-            user32.PostMessageW(self._hwnd, WM_DESTROY, 0, 0)
+            user32.PostMessageW(self._hwnd, WM_CLOSE, 0, 0)
 
     def update_status(self, connected: bool) -> None:
         """
@@ -638,14 +643,10 @@ class TrayIcon:
                 if lparam in (WM_LBUTTONUP, WM_RBUTTONUP):
                     self._show_menu()
                 return 0
-            if msg == WM_MEASUREITEM:
-                _log(f"WM_MEASUREITEM received, lparam={lparam}")
-                self._on_measure_item(lparam)
-                return 1
-            if msg == WM_DRAWITEM:
-                _log(f"WM_DRAWITEM received, lparam={lparam}")
-                self._on_draw_item(lparam)
-                return 1
+            if msg == WM_CLOSE:
+                user32.DestroyWindow(hwnd)
+                return 0
+            
             if msg == WM_DESTROY:
                 self._remove_icon()
                 self._running = False

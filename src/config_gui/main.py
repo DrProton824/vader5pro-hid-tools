@@ -16,10 +16,19 @@ Dependencies
   Required:  tkinter (stdlib)
   Optional:  cairosvg, Pillow  (for SVG rendering; falls back gracefully)
 
-Layout (900 × 720 window)
+Window chrome
+─────────────
+Tk's native title bar looks unmistakably like a Tk app.  Instead of
+hiding it with overrideredirect() (which, on Windows, also drops the
+taskbar entry and breaks Alt‑Tab), we strip just the caption/border
+styles from the underlying HWND via ctypes and draw our own title bar
+(icon, title, minimize, close) as a normal Tk frame.  Minimize/close
+still work exactly like a native window; only the paint style changes.
+
+Layout (900 × 760 window)
 ──────────────────────────
   ┌──────────────────────────────────────────┐
-  │  title bar                               │
+  │  ⬤ Vader Remapper                 – ×    │  ← custom title bar
   ├──────────────────────────────────────────┤
   │                                          │
   │   [ canvas: controller + hit zones ]     │
@@ -35,11 +44,11 @@ Layout (900 × 720 window)
 
 from __future__ import annotations
 
+import ctypes
 import io
 import pathlib
 import sys
 import tkinter as tk
-from tkinter import font as tkfont
 from tkinter import messagebox
 from typing import Optional
 
@@ -59,6 +68,7 @@ _ROOT = _bootstrap_path()
 sys.path.insert(0, str(_ROOT))
 
 from src.shared import config as cfg
+from src.shared import single_instance
 from src.shared.constants import MAPPABLE_BUTTONS
 
 # ── Optional SVG rendering ────────────────────────────────────────────────────
@@ -70,6 +80,9 @@ except ImportError:
     _SVG_OK = False
 
 _SVG_PATH = _ROOT / "assets" / "controller.svg"
+_ICON_PATH = _ROOT / "assets" / "icons" / "config.ico"
+
+MUTEX_NAME = "VaderRemapperConfig"
 
 # ── Auto-save preference ──────────────────────────────────────────────────────
 # If True, config is written immediately after each key assignment.
@@ -93,6 +106,7 @@ C = {
     "highlight":    "#1a4a70",
     "green":        "#3a8a5a",
     "red":          "#8a3a3a",
+    "titlebar":     "#0a0f16",
 }
 
 # ── Hit-zone definitions ──────────────────────────────────────────────────────
@@ -202,6 +216,131 @@ def _scale_coords(coords, sx: float, sy: float) -> list[float]:
 
 def _rect_to_poly(x, y, w, h) -> list[float]:
     return [x, y, x+w, y, x+w, y+h, x, y+h]
+
+
+# ── Native window chrome ──────────────────────────────────────────────────────
+# Strip the native caption/thick-frame styles from the HWND so our own
+# TitleBar frame is the only title bar the user sees, while keeping the
+# window as a normal top-level (taskbar entry, Alt-Tab, minimize all work
+# exactly as before – only the paint style changes).
+
+_GWL_STYLE = -16
+_WS_CAPTION = 0x00C00000
+_WS_THICKFRAME = 0x00040000
+_SWP_NOMOVE = 0x0002
+_SWP_NOSIZE = 0x0001
+_SWP_NOZORDER = 0x0004
+_SWP_FRAMECHANGED = 0x0020
+
+
+def _strip_native_titlebar(root: tk.Tk) -> None:
+    try:
+        root.update_idletasks()
+        hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
+        style = ctypes.windll.user32.GetWindowLongW(hwnd, _GWL_STYLE)
+        style &= ~_WS_CAPTION
+        style &= ~_WS_THICKFRAME
+        ctypes.windll.user32.SetWindowLongW(hwnd, _GWL_STYLE, style)
+        ctypes.windll.user32.SetWindowPos(
+            hwnd, 0, 0, 0, 0, 0,
+            _SWP_FRAMECHANGED | _SWP_NOMOVE | _SWP_NOSIZE | _SWP_NOZORDER,
+        )
+    except Exception:
+        pass  # non-Windows dev environment, or API unavailable – fine
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Custom title bar
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TitleBar(tk.Frame):
+    """
+    Drawn title bar replacing the native one: app icon, title, version,
+    minimize + close buttons, and click-drag-to-move.
+    """
+
+    HEIGHT = 40
+
+    def __init__(self, parent, root: tk.Tk, title: str, version: str, **kwargs):
+        super().__init__(parent, bg=C["titlebar"], height=self.HEIGHT, **kwargs)
+        self.pack_propagate(False)
+        self._root = root
+        self._drag_origin: Optional[tuple[int, int]] = None
+
+        left = tk.Frame(self, bg=C["titlebar"])
+        left.pack(side="left", fill="y", padx=(14, 0))
+
+        tk.Label(
+            left, text="\u25C9", bg=C["titlebar"], fg=C["accent_hover"],
+            font=("Segoe UI", 13),
+        ).pack(side="left", pady=(0, 1))
+
+        tk.Label(
+            left, text=title, bg=C["titlebar"], fg=C["text_bright"],
+            font=("Segoe UI", 11, "bold"), padx=8,
+        ).pack(side="left")
+
+        tk.Label(
+            left, text=version, bg=C["titlebar"], fg=C["text_dim"],
+            font=("Segoe UI", 9),
+        ).pack(side="left")
+
+        right = tk.Frame(self, bg=C["titlebar"])
+        right.pack(side="right", fill="y")
+
+        self._close_btn = self._make_button(right, "\u2715", C["red"], self._on_close)
+        self._close_btn.pack(side="right", fill="y")
+
+        self._min_btn = self._make_button(right, "\u2013", C["surface"], self._on_minimize)
+        self._min_btn.pack(side="right", fill="y")
+
+        # Dragging: bind on the bar itself and the (non-interactive) labels.
+        for widget in (self, left):
+            widget.bind("<ButtonPress-1>", self._start_drag)
+            widget.bind("<B1-Motion>", self._do_drag)
+
+    def _make_button(self, parent, symbol: str, hover_bg: str, command) -> tk.Label:
+        btn = tk.Label(
+            parent, text=symbol, bg=C["titlebar"], fg=C["text_dim"],
+            font=("Segoe UI", 10), width=5, cursor="hand2",
+        )
+
+        def on_enter(_e):
+            btn.config(bg=hover_bg, fg=C["text_bright"])
+
+        def on_leave(_e):
+            btn.config(bg=C["titlebar"], fg=C["text_dim"])
+
+        def on_click(_e):
+            command()
+
+        btn.bind("<Enter>", on_enter)
+        btn.bind("<Leave>", on_leave)
+        btn.bind("<Button-1>", on_click)
+        return btn
+
+    # ── Drag to move ─────────────────────────────────────────────────────────
+
+    def _start_drag(self, event: tk.Event) -> None:
+        self._drag_origin = (event.x_root, event.y_root)
+        self._win_origin = (self._root.winfo_x(), self._root.winfo_y())
+
+    def _do_drag(self, event: tk.Event) -> None:
+        if self._drag_origin is None:
+            return
+        dx = event.x_root - self._drag_origin[0]
+        dy = event.y_root - self._drag_origin[1]
+        x = self._win_origin[0] + dx
+        y = self._win_origin[1] + dy
+        self._root.geometry(f"+{x}+{y}")
+
+    # ── Buttons ──────────────────────────────────────────────────────────────
+
+    def _on_minimize(self) -> None:
+        self._root.iconify()
+
+    def _on_close(self) -> None:
+        self._root.destroy()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -600,57 +739,68 @@ class VaderConfigApp:
         self._root.configure(bg=C["bg"])
         self._root.resizable(False, False)
 
+        try:
+            if _ICON_PATH.exists():
+                self._root.iconbitmap(default=str(_ICON_PATH))
+        except Exception:
+            pass
+
         self._mapping: dict[str, str] = cfg.load()
         self._active_button: Optional[str] = None
 
-        # ── Title ─────────────────────────────────────────────────────────────
-        title_frame = tk.Frame(root, bg=C["bg"])
-        title_frame.pack(fill="x", padx=0, pady=0)
+        # ── Outer 1px border (native frame is gone, draw our own) ──────────────
+        border_frame = tk.Frame(root, bg=C["border"])
+        border_frame.pack(fill="both", expand=True)
 
-        tk.Label(
-            title_frame,
-            text="Flydigi Vader Mapper",
-            bg=C["bg"],
-            fg=C["text_bright"],
-            font=("Segoe UI", 15, "bold"),
-            anchor="w",
-            padx=16,
-        ).pack(side="left", pady=(14, 8))
+        content = tk.Frame(border_frame, bg=C["bg"])
+        content.pack(fill="both", expand=True, padx=1, pady=1)
 
-        tk.Label(
-            title_frame,
-            text="v1.0",
-            bg=C["bg"],
-            fg=C["text_dim"],
-            font=("Segoe UI", 10),
-        ).pack(side="right", padx=16, pady=(14, 8))
+        # ── Custom title bar ─────────────────────────────────────────────────
+        TitleBar(content, root, "Vader Remapper", "v1.1").pack(fill="x")
 
         # ── Controller canvas ─────────────────────────────────────────────────
         self._canvas = ControllerCanvas(
-            root,
+            content,
             mapping=self._mapping,
             on_button_click=self._on_button_clicked,
         )
         self._canvas.pack()
 
         # Thin separator
-        tk.Frame(root, bg=C["border"], height=1).pack(fill="x")
+        tk.Frame(content, bg=C["border"], height=1).pack(fill="x")
 
         # ── Capture bar ───────────────────────────────────────────────────────
-        self._capture_bar = CaptureBar(root, on_clear=self._clear_mapping)
+        self._capture_bar = CaptureBar(content, on_clear=self._clear_mapping)
         self._capture_bar.pack(fill="x")
 
         # Thin separator
-        tk.Frame(root, bg=C["border"], height=1).pack(fill="x")
+        tk.Frame(content, bg=C["border"], height=1).pack(fill="x")
 
         # ── Status bar ────────────────────────────────────────────────────────
-        self._status_bar = StatusBar(root)
+        self._status_bar = StatusBar(content)
         self._status_bar.bind_save(self._save)
         self._status_bar.pack(fill="x")
+
+        # Strip the native caption once all widgets (and thus the HWND)
+        # exist, then re-center now that the frame size actually changed.
+        self._root.after(0, lambda: _strip_native_titlebar(self._root))
+        self._center_window()
 
         # ── Key capture binding ───────────────────────────────────────────────
         # Bound only while a button is active.
         self._capturing = False
+
+    # ── Window placement ──────────────────────────────────────────────────────
+
+    def _center_window(self) -> None:
+        self._root.update_idletasks()
+        w = self._root.winfo_reqwidth()
+        h = self._root.winfo_reqheight()
+        sw = self._root.winfo_screenwidth()
+        sh = self._root.winfo_screenheight()
+        x = (sw - w) // 2
+        y = (sh - h) // 3
+        self._root.geometry(f"{w}x{h}+{x}+{y}")
 
     # ── Button selection ──────────────────────────────────────────────────────
 
@@ -741,6 +891,21 @@ class VaderConfigApp:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
+    # Not strictly required (unlike the service, running two copies of the
+    # GUI can't corrupt anything thanks to the atomic-write config module),
+    # but a second window popping up out of nowhere still looks like a bug.
+    if not single_instance.acquire(MUTEX_NAME):
+        try:
+            ctypes.windll.user32.MessageBoxW(
+                None,
+                "Vader Remapper Config is already open.",
+                "Vader Remapper",
+                0x00000040,
+            )
+        except Exception:
+            pass
+        return
+
     root = tk.Tk()
 
     # High-DPI awareness on Windows

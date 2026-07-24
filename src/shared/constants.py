@@ -6,10 +6,19 @@ update that moves a bit, there is exactly one file to change.
 """
 
 # ── HID device identity ───────────────────────────────────────────────────────
-# Confirmed via hidapitester / Windows Device Manager
-VENDOR_ID  = 0x04B4   # Flydigi (Cypress)
-PRODUCT_ID = 0x2412   # Vader 5 Pro – vendor-specific HID interface
-USAGE_PAGE = 0xFF00   # Vendor-defined usage page (NOT the XInput interface)
+# Confirmed via hidapitester / Windows Device Manager captures
+# (see tools/monitoring_buttons.py, which is what these values were
+# reverse-engineered against).
+#
+# IMPORTANT: the Vader 5 Pro exposes *several* HID interfaces under the
+# same VID/PID (an XInput-passthrough one and a vendor-specific one).
+# Only the vendor-specific interface, identified by USAGE_PAGE below,
+# ever reports the M1-M4 / LM / RM / C / Z / Home / Arrow / Circle bits.
+# Opening "the device" without filtering by usage page will silently
+# attach to the wrong interface and just never see button events.
+VENDOR_ID  = 0x37D7   # Flydigi Vader 5 Pro
+PRODUCT_ID = 0x2401   # Vader 5 Pro
+USAGE_PAGE = 0xFFA0   # Vendor-defined usage page (NOT the XInput interface)
 USAGE      = 0x0001
 
 # HID report length observed from hidapitester captures

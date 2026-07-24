@@ -19,6 +19,18 @@ Design choices
   happy path.
 - Callbacks are called on the reader thread.  The mapper must not do
   anything slow inside them.
+
+Picking the right interface
+────────────────────────────
+The controller enumerates as *multiple* HID interfaces under the same
+VID/PID (an XInput-passthrough interface plus a vendor-specific one).
+``hid.device().open(vid, pid)`` just grabs whichever interface the OS
+lists first, which is usually the wrong one – the process opens
+successfully, read() never times out fatally, but no button bits ever
+change because the vendor reports are arriving on a *different* handle.
+We therefore enumerate all interfaces for this VID/PID and open the one
+whose usage page matches USAGE_PAGE (0xFFA0), exactly like
+tools/monitoring_buttons.py does via ``--usagePage 0xFFA0``.
 """
 
 from __future__ import annotations
@@ -34,6 +46,7 @@ from .constants import (
     PRODUCT_ID,
     RECONNECT_DELAY_SECONDS,
     REPORT_LENGTH,
+    USAGE_PAGE,
     VENDOR_ID,
 )
 
@@ -117,7 +130,8 @@ class HIDReaderThread(threading.Thread):
         while not self._stop_event.is_set():
             device = self._open_device()
             if device is None:
-                # Controller not connected – wait, then retry.
+                # Controller not connected (or vendor interface not found)
+                # – wait, then retry.
                 self._stop_event.wait(timeout=RECONNECT_DELAY_SECONDS)
                 continue
             try:
@@ -128,15 +142,42 @@ class HIDReaderThread(threading.Thread):
                 except Exception:
                     pass
 
-    def _open_device(self) -> Optional[hid.device]:
+    @staticmethod
+    def _find_vendor_interface_path() -> Optional[bytes]:
         """
-        Try to open the vendor HID interface.
+        Enumerate every HID interface for VENDOR_ID/PRODUCT_ID and return
+        the ``path`` of the one on USAGE_PAGE.  Returns None if the
+        controller isn't connected or the vendor interface isn't present.
+        """
+        try:
+            candidates = hid.enumerate(VENDOR_ID, PRODUCT_ID)
+        except Exception:
+            return None
+
+        for info in candidates:
+            if info.get("usage_page") == USAGE_PAGE:
+                return info.get("path")
+
+        # Fall back to the first interface rather than refusing to open
+        # anything, in case usage_page reporting differs across hidapi
+        # backends/OS versions – better to try than to silently do nothing.
+        if candidates:
+            return candidates[0].get("path")
+        return None
+
+    def _open_device(self) -> Optional["hid.device"]:
+        """
+        Open the vendor HID interface specifically (not just "a" device
+        matching VID/PID – see module docstring for why that matters).
 
         Returns None if the device is not present so the caller can retry.
         """
+        path = self._find_vendor_interface_path()
+        if path is None:
+            return None
         try:
             device = hid.device()
-            device.open(VENDOR_ID, PRODUCT_ID)
+            device.open_path(path)
             # Non-blocking mode is NOT used: blocking read() is more efficient
             # because the OS wakes us only when data arrives.
             device.set_nonblocking(False)
@@ -144,7 +185,7 @@ class HIDReaderThread(threading.Thread):
         except OSError:
             return None
 
-    def _read_loop(self, device: hid.device) -> None:
+    def _read_loop(self, device: "hid.device") -> None:
         """
         Block on read() forever, emit events on state changes.
         Exits when the device disconnects or stop() is called.

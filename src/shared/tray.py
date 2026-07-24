@@ -439,7 +439,7 @@ class TrayIcon:
             f"type={dis.CtlType} "
             f"state={dis.itemState} "
             f"hdc={dis.hDC} "
-            f"rect={dis.left},{dis.top},{dis.right},{dis.bottom} "
+            f"rect={dis.rcItem.left},{dis.rcItem.top},{dis.rcItem.right},{dis.rcItem.bottom} "
             f"data={dis.itemData}"
         )
         

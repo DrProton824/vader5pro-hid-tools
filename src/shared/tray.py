@@ -433,19 +433,20 @@ class TrayIcon:
         width, height = self._measure_text(label)
         mis.itemWidth = width
         mis.itemHeight = height
-
-    # DEBUG
-    _log(
-        f"DRAW "
-        f"type={dis.CtlType} "
-        f"state={dis.itemState} "
-        f"hdc={dis.hDC} "
-        f"rect={dis.left},{dis.top},{dis.right},{dis.bottom} "
-        f"data={dis.itemData}"
-    )
     
     def _on_draw_item(self, lparam: int) -> None:
         dis = ctypes.cast(lparam, ctypes.POINTER(DRAWITEMSTRUCT)).contents
+
+        # DEBUG
+        _log(
+            f"DRAW "
+            f"type={dis.CtlType} "
+            f"state={dis.itemState} "
+            f"hdc={dis.hDC} "
+            f"rect={dis.left},{dis.top},{dis.right},{dis.bottom} "
+            f"data={dis.itemData}"
+        )
+        
         if dis.CtlType != ODT_MENU:
             return
 

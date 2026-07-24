@@ -86,6 +86,12 @@ MAPPABLE_BUTTONS: tuple[str, ...] = (
     "Home", "Arrow", "Circle",
 )
 
+# How long (seconds) a button's raw HID bit must hold its new state
+# before it's treated as a real press/release rather than contact
+# bounce or a single noisy report. Comfortably above USB polling
+# jitter, comfortably below the fastest deliberate human tap.
+DEBOUNCE_SECONDS = 0.025
+
 # ── Reconnect behaviour ───────────────────────────────────────────────────────
 # How many seconds to wait before trying to reopen the HID device after
 # a disconnect.  Short enough to feel instant, long enough not to spin.

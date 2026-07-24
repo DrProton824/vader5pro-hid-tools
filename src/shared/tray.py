@@ -183,13 +183,13 @@ class MEASUREITEMSTRUCT(ctypes.Structure):
 
 class DRAWITEMSTRUCT(ctypes.Structure):
     _fields_ = [
-        ("CtlType", wt.UINT),
-        ("CtlID", wt.UINT),
-        ("itemID", wt.UINT),
-        ("itemAction", wt.UINT),
-        ("itemState", wt.UINT),
-        ("hwndItem", wt.HWND),
-        ("hDC", wt.HDC),
+        ("CtlType", ctypes.c_uint),
+        ("CtlID", ctypes.c_uint),
+        ("itemID", ctypes.c_uint),
+        ("itemAction", ctypes.c_uint),
+        ("itemState", ctypes.c_uint),
+        ("hwndItem", ctypes.c_void_p),
+        ("hDC", ctypes.c_void_p),
         ("rcItem", wt.RECT),
         ("itemData", ctypes.c_size_t),
     ]
@@ -462,8 +462,16 @@ class TrayIcon:
             dis.rcItem.left + 14, dis.rcItem.top,
             dis.rcItem.right - 8, dis.rcItem.bottom,
         )
+        _log(
+            f"DRAW text='{label}' hdc={dis.hDC} "
+            f"rect={rect.left},{rect.top},{rect.right},{rect.bottom}"
+        )
+        
         user32.DrawTextW(
-            dis.hDC, label, -1, ctypes.byref(rect),
+            dis.hDC,
+            label,
+            -1,
+            ctypes.byref(rect),
             DT_SINGLELINE | DT_VCENTER | DT_LEFT,
         )
 

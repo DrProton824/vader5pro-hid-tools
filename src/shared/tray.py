@@ -183,26 +183,22 @@ class MEASUREITEMSTRUCT(ctypes.Structure):
 
 class DRAWITEMSTRUCT(ctypes.Structure):
     _fields_ = [
-        ("CtlType", ctypes.c_uint32),
-        ("CtlID", ctypes.c_uint32),
-        ("itemID", ctypes.c_uint32),
-        ("itemAction", ctypes.c_uint32),
-        ("itemState", ctypes.c_uint32),
-        ("hwndItem", ctypes.c_void_p),
-        ("hDC", ctypes.c_void_p),
-        ("left", ctypes.c_long),
-        ("top", ctypes.c_long),
-        ("right", ctypes.c_long),
-        ("bottom", ctypes.c_long),
+        ("CtlType", wt.UINT),
+        ("CtlID", wt.UINT),
+        ("itemID", wt.UINT),
+        ("itemAction", wt.UINT),
+        ("itemState", wt.UINT),
+        ("hwndItem", wt.HWND),
+        ("hDC", wt.HDC),
+        ("rcItem", wt.RECT),
         ("itemData", ctypes.c_size_t),
     ]
-
 
 # AppendMenuW's 4th param is LPCWSTR normally, but for MF_OWNERDRAW items
 # it's treated as an opaque application value (ends up in itemData of the
 # MEASUREITEMSTRUCT/DRAWITEMSTRUCT). Declare it as a void pointer so we
 # can safely pass an integer index instead of a string.
-user32.AppendMenuW.argtypes = [wt.HMENU, wt.UINT, ctypes.c_size_t, ctypes.c_void_p]
+user32.AppendMenuW.argtypes = [wt.HMENU, wt.UINT, ctypes.c_size_t, ctypes.c_size_t]
 user32.AppendMenuW.restype = wt.BOOL
 
 user32.GetDC.argtypes = [wt.HWND]
@@ -393,7 +389,7 @@ class TrayIcon:
             flags = MF_STRING | MF_OWNERDRAW
             if callback is None:
                 flags |= MF_DISABLED | MF_GRAYED
-            user32.AppendMenuW(hmenu, flags, 1000 + i, ctypes.c_void_p(i))
+            user32.AppendMenuW(hmenu, flags, 1000 + i, i)
 
         pt = wt.POINT()
         user32.GetCursorPos(ctypes.byref(pt))
@@ -460,12 +456,7 @@ class TrayIcon:
 
         bg_color = _COLOR_SELECTED if selected else _COLOR_SURFACE
         brush = gdi32.CreateSolidBrush(bg_color)
-        rc = wt.RECT(
-            dis.left,
-            dis.top,
-            dis.right,
-            dis.bottom,
-        )
+        rc = dis.rcItem
         
         user32.FillRect(dis.hDC, ctypes.byref(rc), brush)
         gdi32.DeleteObject(brush)
@@ -480,10 +471,10 @@ class TrayIcon:
         gdi32.SetTextColor(dis.hDC, text_color)
 
         rect = wt.RECT(
-            dis.left + 14,
-            dis.top,
-            dis.right - 8,
-            dis.bottom,
+            dis.rcItem.left + 14,
+            dis.rcItem.top,
+            dis.rcItem.right - 8,
+            dis.rcItem.bottom,
         )
         _log(
             f"DRAW text='{label}' hdc={dis.hDC} "

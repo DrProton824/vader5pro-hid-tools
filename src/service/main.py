@@ -97,7 +97,17 @@ def main() -> None:
     mapper = ButtonMapper(sender)
     mapper.update_mapping(mapping)
 
-    reader = HIDReaderThread(callback=mapper.handle_event)
+    icon_holder: dict[str, TrayIcon] = {}
+
+    def _on_connection_change(connected: bool) -> None:
+        icon = icon_holder.get("icon")
+        if icon is not None:
+            icon.update_status(connected)
+
+    reader = HIDReaderThread(
+        callback=mapper.handle_event,
+        on_connection_change=_on_connection_change,
+    )
     reader.start()
 
     stop_event = threading.Event()
@@ -110,12 +120,13 @@ def main() -> None:
                 mapper.update_mapping(cfg.load())
 
     watcher_thread = threading.Thread(
-        target=_watch_config, name="ConfigWatcher", daemon=True
+        target=_watch_config,
+        name="ConfigWatcher",
+        daemon=True,
     )
     watcher_thread.start()
 
     # ── Tray icon ─────────────────────────────────────────────────────────────
-    icon_holder: dict[str, TrayIcon] = {}
 
     def _open_config() -> None:
         config_exe = _ROOT / "VaderConfig.exe"
@@ -125,7 +136,8 @@ def main() -> None:
             else:
                 # Running from source – fall back to launching the module.
                 subprocess.Popen(
-                    [sys.executable, "-m", "src.config_gui.main"], cwd=str(_ROOT)
+                    [sys.executable, "-m", "src.config_gui.main"],
+                    cwd=str(_ROOT),
                 )
         except Exception:
             pass
@@ -136,7 +148,7 @@ def main() -> None:
         icon_holder["icon"].stop()
 
     icon = TrayIcon(
-        tooltip="Vader Remapper \u2013 running",
+        tooltip="Vader Remapper",
         icon_path=_ROOT / "assets" / "icons" / "service.ico",
         menu_items=[
             ("Open Config", _open_config),
@@ -144,6 +156,7 @@ def main() -> None:
         ],
     )
     icon_holder["icon"] = icon
+    icon.update_status(False)  # will flip to True as soon as the reader connects
 
     try:
         icon.run()  # blocks until "Exit" is chosen

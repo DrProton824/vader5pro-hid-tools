@@ -42,7 +42,7 @@ def _base_args(name: str, entry: Path) -> list[str]:
 
 
 def run(cmd: list[str]) -> None:
-    print("\n▶", " ".join(str(c) for c in cmd))
+    print("\n>", " ".join(str(c) for c in cmd))
     result = subprocess.run(cmd, cwd=ROOT)
     if result.returncode != 0:
         sys.exit(result.returncode)

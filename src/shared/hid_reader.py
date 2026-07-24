@@ -43,6 +43,7 @@ import hid  # pip install hid  (wraps hidapi.dll / libhidapi)
 
 from .constants import (
     BUTTON_BITS,
+    DEBOUNCE_SECONDS,
     PRODUCT_ID,
     RECONNECT_DELAY_SECONDS,
     REPORT_LENGTH,
@@ -51,6 +52,7 @@ from .constants import (
 )
 
 # ── Event types ───────────────────────────────────────────────────────────────
+
 
 class ButtonEvent:
     """Base class – gives isinstance checks a clean anchor."""
@@ -77,6 +79,7 @@ EventCallback = Callable[[ButtonEvent], None]
 
 # ── Decoder ───────────────────────────────────────────────────────────────────
 
+
 def decode_report(report: bytes) -> frozenset[str]:
     """
     Return the set of button names that are currently pressed according
@@ -97,6 +100,7 @@ def decode_report(report: bytes) -> frozenset[str]:
 
 # ── Reader thread ─────────────────────────────────────────────────────────────
 
+
 class HIDReaderThread(threading.Thread):
     """
     Background thread that reads HID reports and emits button events.
@@ -112,11 +116,26 @@ class HIDReaderThread(threading.Thread):
         reader.stop()
     """
 
-    def __init__(self, callback: EventCallback) -> None:
+    def __init__(
+        self,
+        callback: EventCallback,
+        on_connection_change: Optional[Callable[[bool], None]] = None,
+    ) -> None:
         super().__init__(name="HIDReader", daemon=True)
         self._callback = callback
+        self._on_connection_change = on_connection_change
         self._stop_event = threading.Event()
+
+        # Raw state from the previous HID report.
         self._previous: frozenset[str] = frozenset()
+
+        # Debounced state that has actually been reported.
+        self._debounced: set[str] = set()
+
+        # Last accepted transition time for each button.
+        self._last_change: dict[str, float] = {}
+
+        self._connected = False
 
     # ── Public API ────────────────────────────────────────────────────────────
 
@@ -126,17 +145,35 @@ class HIDReaderThread(threading.Thread):
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
+    def _set_connected(self, connected: bool) -> None:
+        """Notify when the controller connection state changes."""
+        if connected == self._connected:
+            return
+
+        self._connected = connected
+
+        if self._on_connection_change:
+            try:
+                self._on_connection_change(connected)
+            except Exception:
+                pass
+
     def run(self) -> None:
         while not self._stop_event.is_set():
             device = self._open_device()
             if device is None:
                 # Controller not connected (or vendor interface not found)
                 # – wait, then retry.
+                self._set_connected(False)
                 self._stop_event.wait(timeout=RECONNECT_DELAY_SECONDS)
                 continue
+
+            self._set_connected(True)
+
             try:
                 self._read_loop(device)
             finally:
+                self._set_connected(False)
                 try:
                     device.close()
                 except Exception:
@@ -206,7 +243,6 @@ class HIDReaderThread(threading.Thread):
             report_bytes = bytes(report)
             current = decode_report(report_bytes)
             self._emit_deltas(current)
-            self._previous = current
 
     def _emit_deltas(self, current: frozenset[str]) -> None:
         """
@@ -215,7 +251,24 @@ class HIDReaderThread(threading.Thread):
         Only buttons that actually changed state generate callbacks, so the
         mapper is never called unnecessarily.
         """
-        for button in current - self._previous:
-            self._callback(ButtonPressed(button))
-        for button in self._previous - current:
-            self._callback(ButtonReleased(button))
+        now = time.monotonic()
+        changed = current.symmetric_difference(self._previous)
+
+        for button in changed:
+            last = self._last_change.get(button, 0.0)
+            if now - last < DEBOUNCE_SECONDS:
+                continue  # Ignore rapid state flips (contact bounce).
+
+            self._last_change[button] = now
+
+            is_pressed = button in current
+            was_pressed = button in self._debounced
+
+            if is_pressed and not was_pressed:
+                self._debounced.add(button)
+                self._callback(ButtonPressed(button))
+            elif not is_pressed and was_pressed:
+                self._debounced.discard(button)
+                self._callback(ButtonReleased(button))
+
+        self._previous = current

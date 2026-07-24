@@ -183,14 +183,17 @@ class MEASUREITEMSTRUCT(ctypes.Structure):
 
 class DRAWITEMSTRUCT(ctypes.Structure):
     _fields_ = [
-        ("CtlType", ctypes.c_uint),
-        ("CtlID", ctypes.c_uint),
-        ("itemID", ctypes.c_uint),
-        ("itemAction", ctypes.c_uint),
-        ("itemState", ctypes.c_uint),
+        ("CtlType", ctypes.c_uint32),
+        ("CtlID", ctypes.c_uint32),
+        ("itemID", ctypes.c_uint32),
+        ("itemAction", ctypes.c_uint32),
+        ("itemState", ctypes.c_uint32),
         ("hwndItem", ctypes.c_void_p),
         ("hDC", ctypes.c_void_p),
-        ("rcItem", wt.RECT),
+        ("left", ctypes.c_long),
+        ("top", ctypes.c_long),
+        ("right", ctypes.c_long),
+        ("bottom", ctypes.c_long),
         ("itemData", ctypes.c_size_t),
     ]
 
@@ -431,6 +434,16 @@ class TrayIcon:
         mis.itemWidth = width
         mis.itemHeight = height
 
+    # DEBUG
+    _log(
+        f"DRAW "
+        f"type={dis.CtlType} "
+        f"state={dis.itemState} "
+        f"hdc={dis.hDC} "
+        f"rect={dis.left},{dis.top},{dis.right},{dis.bottom} "
+        f"data={dis.itemData}"
+    )
+    
     def _on_draw_item(self, lparam: int) -> None:
         dis = ctypes.cast(lparam, ctypes.POINTER(DRAWITEMSTRUCT)).contents
         if dis.CtlType != ODT_MENU:
@@ -446,7 +459,14 @@ class TrayIcon:
 
         bg_color = _COLOR_SELECTED if selected else _COLOR_SURFACE
         brush = gdi32.CreateSolidBrush(bg_color)
-        user32.FillRect(dis.hDC, ctypes.byref(dis.rcItem), brush)
+        rc = wt.RECT(
+            dis.left,
+            dis.top,
+            dis.right,
+            dis.bottom,
+        )
+        
+        user32.FillRect(dis.hDC, ctypes.byref(rc), brush)
         gdi32.DeleteObject(brush)
 
         gdi32.SetBkMode(dis.hDC, 1)  # TRANSPARENT
@@ -459,8 +479,10 @@ class TrayIcon:
         gdi32.SetTextColor(dis.hDC, text_color)
 
         rect = wt.RECT(
-            dis.rcItem.left + 14, dis.rcItem.top,
-            dis.rcItem.right - 8, dis.rcItem.bottom,
+            dis.left + 14,
+            dis.top,
+            dis.right - 8,
+            dis.bottom,
         )
         _log(
             f"DRAW text='{label}' hdc={dis.hDC} "

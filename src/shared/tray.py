@@ -164,6 +164,51 @@ class DRAWITEMSTRUCT(ctypes.Structure):
 user32.AppendMenuW.argtypes = [wt.HMENU, wt.UINT, ctypes.c_size_t, ctypes.c_void_p]
 user32.AppendMenuW.restype = wt.BOOL
 
+user32.GetDC.argtypes = [wt.HWND]
+user32.GetDC.restype = wt.HDC
+
+user32.ReleaseDC.argtypes = [wt.HWND, wt.HDC]
+user32.ReleaseDC.restype = ctypes.c_int
+
+user32.FillRect.argtypes = [wt.HDC, ctypes.POINTER(wt.RECT), wt.HBRUSH]
+user32.FillRect.restype = ctypes.c_int
+
+user32.DrawTextW.argtypes = [
+    wt.HDC, ctypes.c_wchar_p, ctypes.c_int, ctypes.POINTER(wt.RECT), wt.UINT,
+]
+user32.DrawTextW.restype = ctypes.c_int
+
+gdi32.GetTextExtentPoint32W.argtypes = [
+    wt.HDC, ctypes.c_wchar_p, ctypes.c_int, ctypes.POINTER(SIZE),
+]
+gdi32.GetTextExtentPoint32W.restype = wt.BOOL
+
+gdi32.SetBkMode.argtypes = [wt.HDC, ctypes.c_int]
+gdi32.SetBkMode.restype = ctypes.c_int
+
+gdi32.SetTextColor.argtypes = [wt.HDC, wt.DWORD]
+gdi32.SetTextColor.restype = wt.DWORD
+
+gdi32.CreateSolidBrush.argtypes = [wt.DWORD]
+gdi32.CreateSolidBrush.restype = wt.HBRUSH
+
+gdi32.DeleteObject.argtypes = [ctypes.c_void_p]
+gdi32.DeleteObject.restype = wt.BOOL
+
+user32.CreatePopupMenu.argtypes = []
+user32.CreatePopupMenu.restype = wt.HMENU
+
+user32.TrackPopupMenu.argtypes = [
+    wt.HMENU, wt.UINT, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+    wt.HWND, ctypes.POINTER(wt.RECT),
+]
+user32.TrackPopupMenu.restype = ctypes.c_int
+
+user32.CreateWindowExW.restype = wt.HWND
+user32.RegisterClassW.restype = wt.ATOM
+kernel32.GetModuleHandleW.restype = wt.HINSTANCE
+user32.LoadImageW.restype = wt.HANDLE
+user32.LoadIconW.restype = wt.HICON
 
 class TrayIcon:
     _CLASS_NAME = "VaderRemapperTrayWndClass"

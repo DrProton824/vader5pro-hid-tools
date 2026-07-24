@@ -1,0 +1,43 @@
+name: Build Windows Executables
+
+on:
+  push:
+    tags:
+      - "v*"           # Trigger on version tags: v0.1.0, v1.0.0, etc.
+  workflow_dispatch:   # Allow manual trigger from GitHub UI
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller hidapi
+          # Optional: pip install cairosvg Pillow
+
+      - name: Build executables
+        run: python build/build.py
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: VaderMapper-windows
+          path: dist/VaderMapper/
+
+      - name: Create release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/VaderMapper/**
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

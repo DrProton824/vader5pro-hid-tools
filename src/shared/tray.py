@@ -204,6 +204,11 @@ user32.TrackPopupMenu.argtypes = [
 ]
 user32.TrackPopupMenu.restype = ctypes.c_int
 
+user32.CreateWindowExW.argtypes = [
+    wt.DWORD, ctypes.c_wchar_p, ctypes.c_wchar_p, wt.DWORD,
+    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+    wt.HWND, wt.HMENU, wt.HINSTANCE, ctypes.c_void_p,
+]
 user32.CreateWindowExW.restype = wt.HWND
 user32.RegisterClassW.restype = wt.ATOM
 kernel32.GetModuleHandleW.restype = wt.HINSTANCE

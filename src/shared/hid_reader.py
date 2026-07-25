@@ -44,14 +44,35 @@ import hid  # pip install hid  (wraps hidapi.dll / libhidapi)
 from .constants import (
     BUTTON_BITS,
     DEBOUNCE_SECONDS,
+    INIT_COMMANDS,
     PRODUCT_ID,
     RECONNECT_DELAY_SECONDS,
     REPORT_LENGTH,
-    REPORT_MAGIC,
-    REPORT_TYPE_INPUT,
+    STOP_COMMAND,
     USAGE_PAGE,
     VENDOR_ID,
 )
+
+# Off by default: sends third-party-recovered vendor handshake commands
+# before/after reading. Our current decode already works without this on
+# Windows/hidapi. Flip to True only to experiment with reliability around
+# cold-plug / resume-from-sleep; verify with tools/monitoring_buttons.py
+# first if reports stop arriving after enabling it.
+SEND_VENDOR_HANDSHAKE = False
+
+
+def _send_command(device: "hid.device", command: tuple[int, ...]) -> None:
+    """
+    Best-effort output-report write. hidapi's write() expects the report
+    ID as the first byte; this device uses unnumbered reports, so that
+    byte is 0x00, followed by the command padded to REPORT_LENGTH bytes.
+    Never raises – a failed handshake write should not crash the reader.
+    """
+    try:
+        payload = bytes(command) + bytes(REPORT_LENGTH - len(command))
+        device.write(bytes([0x00]) + payload)
+    except OSError:
+        pass
 
 # ── Event types ───────────────────────────────────────────────────────────────
 
@@ -190,6 +211,8 @@ class HIDReaderThread(threading.Thread):
                 self._read_loop(device)
             finally:
                 self._set_connected(False)
+                if SEND_VENDOR_HANDSHAKE:
+                    _send_command(device, STOP_COMMAND)
                 try:
                     device.close()
                 except Exception:
@@ -234,6 +257,9 @@ class HIDReaderThread(threading.Thread):
             # Non-blocking mode is NOT used: blocking read() is more efficient
             # because the OS wakes us only when data arrives.
             device.set_nonblocking(False)
+            if SEND_VENDOR_HANDSHAKE:
+                for command in INIT_COMMANDS:
+                    _send_command(device, command)
             return device
         except OSError:
             return None

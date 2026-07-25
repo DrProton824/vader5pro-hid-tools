@@ -47,6 +47,8 @@ from .constants import (
     PRODUCT_ID,
     RECONNECT_DELAY_SECONDS,
     REPORT_LENGTH,
+    REPORT_MAGIC,
+    REPORT_TYPE_INPUT,
     USAGE_PAGE,
     VENDOR_ID,
 )
@@ -80,13 +82,27 @@ EventCallback = Callable[[ButtonEvent], None]
 # ── Decoder ───────────────────────────────────────────────────────────────────
 
 
-def decode_report(report: bytes) -> frozenset[str]:
+def decode_report(report: bytes) -> Optional[frozenset[str]]:
     """
-    Return the set of button names that are currently pressed according
-    to one 64-byte HID report.
+    Return the set of button names currently pressed, or None if this
+    report isn't a live input report at all.
+
+    The vendor interface reuses BUTTON_BITS' byte offsets for unrelated
+    data in other report kinds (firmware/heartbeat status, LED-config
+    responses, ...), distinguished by the byte at index 2. Skipping the
+    check would occasionally decode a non-input report as a burst of
+    phantom presses/releases.
 
     Pure function – no state, easy to unit-test.
     """
+    if (
+        len(report) < 3
+        or report[0] != REPORT_MAGIC[0]
+        or report[1] != REPORT_MAGIC[1]
+        or report[2] != REPORT_TYPE_INPUT
+    ):
+        return None
+
     pressed: set[str] = set()
     for byte_index, bit_map in BUTTON_BITS.items():
         if byte_index >= len(report):
@@ -242,6 +258,8 @@ class HIDReaderThread(threading.Thread):
 
             report_bytes = bytes(report)
             current = decode_report(report_bytes)
+            if current is None:
+                continue  # heartbeat/status/LED-response report, not button data
             self._emit_deltas(current)
 
     def _emit_deltas(self, current: frozenset[str]) -> None:

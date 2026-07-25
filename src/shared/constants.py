@@ -34,6 +34,25 @@ REPORT_LENGTH = 32
 REPORT_MAGIC: tuple[int, int] = (0x5A, 0xA5)
 REPORT_TYPE_INPUT = 0xEF
 
+# ── Vendor initialization handshake (experimental) ────────────────────────────
+# Recovered from independent clean-room reverse-engineering of the same
+# vendor interface (ControlLab's Vader5Protocol.swift / Vader5Bridge.swift).
+# Format: 0x5A 0xA5 <cmd> <params...> <checksum>, checksum = 8-bit additive
+# sum of every byte from <cmd> through the last param.
+# init[4]'s 0x01 vs STOP_COMMAND's 0x00 (same position) look like an
+# enable/disable flag for the extended (0xEF) report stream.
+# NOTE: our Windows hidapi backend already decodes buttons correctly
+# without sending anything, so this is untested here — treat as an
+# opt-in experiment (see hid_reader.SEND_VENDOR_HANDSHAKE), not a fix.
+INIT_COMMANDS: tuple[tuple[int, ...], ...] = (
+    (0x5A, 0xA5, 0x01, 0x02, 0x03),
+    (0x5A, 0xA5, 0xA1, 0x02, 0xA3),
+    (0x5A, 0xA5, 0x02, 0x02, 0x04),
+    (0x5A, 0xA5, 0x04, 0x02, 0x06),
+    (0x5A, 0xA5, 0x11, 0x07, 0xFF, 0x01, 0xFF, 0xFF, 0xFF, 0x15),
+)
+STOP_COMMAND: tuple[int, ...] = (0x5A, 0xA5, 0x11, 0x07, 0xFF, 0x00, 0xFF, 0xFF, 0xFF, 0x14)
+
 # ── Button bit layout ─────────────────────────────────────────────────────────
 # Each entry maps  byte_index -> { bitmask -> button_name }
 # Byte indices are zero-based offsets inside the 64-byte HID report.

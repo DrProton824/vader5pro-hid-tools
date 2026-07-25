@@ -121,64 +121,58 @@ C = {
 #
 # label_offset: (dx, dy) from shape centre for the shortcut label.
 
-SVG_W, SVG_H = 860, 580   # SVG viewBox dimensions
+SVG_W, SVG_H = 1315, 913   # new controller.svg viewBox dimensions
 
 HIT_ZONES: dict[str, dict] = {
-    "M1": {
-        "shape": "poly",
-        "coords": [480,450, 590,450, 602,458, 602,487, 464,487, 456,475],
-        "label_xy": (531, 468),
-    },
-    "M2": {
-        "shape": "poly",
-        "coords": [270,450, 360,450, 380,475, 376,487, 258,487, 258,458],
-        "label_xy": (319, 468),
-    },
-    "M3": {
-        "shape": "poly",
-        "coords": [485,497, 605,497, 616,505, 616,530, 467,530, 470,518],
-        "label_xy": (543, 513),
-    },
-    "M4": {
-        "shape": "poly",
-        "coords": [255,497, 375,497, 390,518, 385,530, 244,530, 244,505],
-        "label_xy": (317, 513),
-    },
-    "LM": {
-        "shape": "rect",
-        "coords": (170, 100, 80, 36),
-        "label_xy": (210, 118),
-    },
-    "RM": {
-        "shape": "rect",
-        "coords": (610, 100, 80, 36),
-        "label_xy": (650, 118),
-    },
-    "Z": {
-        "shape": "circle",
-        "coords": (690, 350, 20),
-        "label_xy": (690, 348),
-    },
-    "C": {
-        "shape": "circle",
-        "coords": (655, 390, 20),
-        "label_xy": (655, 388),
-    },
-    "Home": {
-        "shape": "circle",
-        "coords": (430, 175, 16),
-        "label_xy": (430, 173),
-    },
-    "Arrow": {
-        "shape": "circle",
-        "coords": (430, 430, 14),
-        "label_xy": (430, 428),
-    },
-    "Circle": {
-        "shape": "circle",
-        "coords": (430, 430, 14),   # placeholder – adjust if Circle differs
-        "label_xy": (480, 395),
-    },
+    # ── Face buttons ─────────────────────────────────────────────────
+    "Y": {"shape": "circle", "coords": (923, 320, 32), "label_xy": (923, 320)},
+    "X": {"shape": "circle", "coords": (860, 383, 32), "label_xy": (860, 383)},
+    "B": {"shape": "circle", "coords": (985, 383, 32), "label_xy": (985, 383)},
+    "A": {"shape": "circle", "coords": (923, 445, 32), "label_xy": (923, 445)},
+
+    # ── Z / C ────────────────────────────────────────────────────────
+    "Z": {"shape": "circle", "coords": (1015, 487, 32), "label_xy": (1015, 487)},
+    "C": {"shape": "circle", "coords": (952, 548, 32), "label_xy": (952, 548)},
+
+    # ── D-Pad (four independent zones) ──────────────────────────────
+    "DPad Up":    {"shape": "circle", "coords": (527, 448, 26), "label_xy": (527, 415)},
+    "DPad Down":  {"shape": "circle", "coords": (527, 563, 26), "label_xy": (527, 596)},
+    "DPad Left":  {"shape": "circle", "coords": (469, 505, 26), "label_xy": (436, 505)},
+    "DPad Right": {"shape": "circle", "coords": (589, 505, 26), "label_xy": (622, 505)},
+
+    # ── Sticks (click) ──────────────────────────────────────────────
+    "STICK-L": {"shape": "circle", "coords": (391, 370, 29), "label_xy": (391, 370)},
+    "STICK-R": {"shape": "circle", "coords": (789, 509, 29), "label_xy": (789, 509)},
+
+    # ── Select / Start ───────────────────────────────────────────────
+    "Select": {"shape": "circle", "coords": (535, 297, 30), "label_xy": (535, 258)},
+    "Start":  {"shape": "circle", "coords": (778, 297, 30), "label_xy": (778, 258)},
+
+    # ── Shoulder buttons ─────────────────────────────────────────────
+    # NOTE: coordinates follow the *printed* text in the SVG. The source
+    # file's internal inkscape:label on these paths is mirrored/swapped
+    # vs. the printed text (looks like a left/right mirror-copy that
+    # wasn't relabeled) — do not trust path labels if you re-derive this.
+    "RM": {"shape": "rect", "coords": (185, 35, 150, 70), "label_xy": (260, 70)},
+    "RB": {"shape": "rect", "coords": (105, 120, 165, 65), "label_xy": (187, 152)},
+    "RT": {"shape": "rect", "coords": (95, 14, 100, 65),  "label_xy": (145, 46)},
+    "LM": {"shape": "rect", "coords": (995, 35, 150, 70), "label_xy": (1070, 70)},
+    "LB": {"shape": "rect", "coords": (1030, 120, 170, 65), "label_xy": (1115, 152)},
+    "LT": {"shape": "rect", "coords": (1120, 14, 100, 65),  "label_xy": (1170, 46)},
+
+    # ── Macro buttons ────────────────────────────────────────────────
+    "M1": {"shape": "rect", "coords": (715, 668, 130, 75), "label_xy": (780, 706)},
+    "M2": {"shape": "rect", "coords": (435, 668, 140, 80), "label_xy": (505, 708)},
+    "M3": {"shape": "rect", "coords": (700, 800, 180, 80), "label_xy": (790, 838)},
+    "M4": {"shape": "rect", "coords": (400, 800, 200, 80), "label_xy": (500, 838)},
+
+    # ── Home / Arrow / Circle ────────────────────────────────────────
+    # These three don't have distinct shapes in the new artwork (only an
+    # "FN" toggle near the logo). Placeholder zones on that toggle so the
+    # app keeps working — reposition once the artwork has real shapes.
+    "Home":   {"shape": "circle", "coords": (612, 684, 22), "label_xy": (612, 655)},
+    "Arrow":  {"shape": "circle", "coords": (664, 684, 22), "label_xy": (664, 655)},
+    "Circle": {"shape": "circle", "coords": (612, 684, 22), "label_xy": (612, 715)},
 }
 
 # ── Modifier normalisation ────────────────────────────────────────────────────
@@ -353,8 +347,9 @@ class ControllerCanvas(tk.Canvas):
     and renders interactive hit zones for each mappable button.
     """
 
-    CANVAS_W = 860
-    CANVAS_H = 500   # crop some whitespace from SVG bottom
+    CANVAS_W = 900
+    CANVAS_H = 625   # 900 * (913/1315), uniform scale – new SVG has no
+                      # whitespace to crop like the old one did
 
     def __init__(self, parent, mapping: dict[str, str],
                  on_button_click, **kwargs):
@@ -408,93 +403,45 @@ class ControllerCanvas(tk.Canvas):
 
     def _render_fallback(self) -> None:
         """
-        Draw a simple dark controller schematic using only tkinter Canvas.
-        Matches the general layout so hit zones line up correctly.
+        Draw a minimal placeholder scene using only tkinter Canvas when
+        cairosvg/Pillow aren't installed.
+
+        Rather than hand-copying the (much more detailed) new controller
+        artwork with Canvas primitives, this draws one shape per entry in
+        HIT_ZONES. That guarantees the fallback view always lines up with
+        the real click targets, even as HIT_ZONES is tuned later.
         """
         sx, sy = self._sx, self._sy
 
-        def rx(x): return x * sx
-        def ry(y): return y * sy
-
-        # Body
-        body_pts = [
-            180,140, 430,95, 680,140,
-            710,320, 700,470, 620,510,
-            560,510, 510,490, 490,465,
-            430,445, 370,465, 350,490,
-            300,510, 240,510, 160,470,
-            130,420, 150,320,
-        ]
-        scaled_body = _scale_coords(body_pts, sx, sy)
-        self.create_polygon(
-            scaled_body,
-            fill=C["surface2"], outline=C["border"], width=2,
-            smooth=True,
-        )
-
-        # V-stripe
-        self.create_line(
-            rx(350), ry(130), rx(430), ry(230), rx(510), ry(130),
-            fill="#1a3050", width=14, joinstyle="round",
-        )
-
-        # Left stick
-        self.create_oval(
-            rx(218), ry(218), rx(322), ry(322),
-            fill=C["surface2"], outline=C["border"], width=2,
-        )
-        self.create_oval(
-            rx(235), ry(235), rx(305), ry(305),
-            fill="#0d1520", outline=C["border"], width=1,
-        )
-
-        # Right stick
-        self.create_oval(
-            rx(498), ry(303), rx(602), ry(407),
-            fill=C["surface2"], outline=C["border"], width=2,
-        )
-        self.create_oval(
-            rx(515), ry(320), rx(585), ry(390),
-            fill="#0d1520", outline=C["border"], width=1,
-        )
-
-        # D-pad horizontal
         self.create_rectangle(
-            rx(300), ry(335), rx(384), ry(363),
-            fill=C["surface"], outline=C["border"], width=1,
-        )
-        # D-pad vertical
-        self.create_rectangle(
-            rx(328), ry(307), rx(356), ry(391),
-            fill=C["surface"], outline=C["border"], width=1,
+            0, 0, self.CANVAS_W, self.CANVAS_H,
+            fill=C["surface2"], outline="",
         )
 
-        # Face buttons (non-mappable, dim)
-        for cx, cy, label in [
-            (630, 235, "Y"), (590, 275, "X"),
-            (670, 275, "B"), (630, 315, "A"),
-        ]:
-            self.create_oval(
-                rx(cx-22), ry(cy-22), rx(cx+22), ry(cy+22),
-                fill=C["surface2"], outline=C["border"], width=1,
-            )
-            self.create_text(
-                rx(cx), ry(cy),
-                text=label, fill=C["text_dim"], font=("Segoe UI", 11),
-            )
+        for button, zone in HIT_ZONES.items():
+            shape = zone["shape"]
+            coords = zone["coords"]
 
-        # Shoulder placeholders (non-mappable)
-        for x, y, w, h, label in [
-            (80, 100, 80, 36, "LT"), (115, 145, 80, 32, "LB"),
-            (700, 100, 80, 36, "RT"), (665, 145, 80, 32, "RB"),
-        ]:
-            self.create_rectangle(
-                rx(x), ry(y), rx(x+w), ry(y+h),
-                fill=C["surface2"], outline=C["border"], width=1,
-            )
+            if shape == "rect":
+                x, y, w, h = coords
+                self.create_rectangle(
+                    x * sx, y * sy, (x + w) * sx, (y + h) * sy,
+                    fill=C["surface"], outline=C["border"], width=1,
+                )
+            elif shape == "circle":
+                cx, cy, r = coords
+                self.create_oval(
+                    (cx - r) * sx, (cy - r) * sy,
+                    (cx + r) * sx, (cy + r) * sy,
+                    fill=C["surface"], outline=C["border"], width=1,
+                )
+            else:
+                continue
+
+            lx, ly = zone["label_xy"]
             self.create_text(
-                rx(x+w//2), ry(y+h//2),
-                text=label, fill=C["text_dim"], font=("Segoe UI", 11),
+                lx * sx, ly * sy,
+                text=button, fill=C["text_dim"], font=("Segoe UI", 8),
             )
 
     # ── Hit zones ─────────────────────────────────────────────────────────────

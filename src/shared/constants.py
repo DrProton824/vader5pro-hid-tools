@@ -24,6 +24,16 @@ USAGE      = 0x0001
 # HID report length observed from hidapitester captures
 REPORT_LENGTH = 32
 
+# ── Report framing ────────────────────────────────────────────────────────────
+# The vendor interface multiplexes several report kinds over the same
+# 32-byte reads and the same byte offsets used by BUTTON_BITS below
+# (live input, firmware/heartbeat status, LED-config responses, ...).
+# Byte 2 is the discriminator; only REPORT_TYPE_INPUT reports actually
+# carry button/stick data at those offsets. Confirmed against third-party
+# clean-room reverse engineering (ControlLab's Vader5ProtocolTests.swift).
+REPORT_MAGIC: tuple[int, int] = (0x5A, 0xA5)
+REPORT_TYPE_INPUT = 0xEF
+
 # ── Button bit layout ─────────────────────────────────────────────────────────
 # Each entry maps  byte_index -> { bitmask -> button_name }
 # Byte indices are zero-based offsets inside the 64-byte HID report.

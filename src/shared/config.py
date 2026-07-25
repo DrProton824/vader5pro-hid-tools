@@ -45,15 +45,24 @@ Mapping = dict[str, str]
 # ── Defaults ──────────────────────────────────────────────────────────────────
 # Shipped in the repo so a first run works without opening the GUI.
 DEFAULT_MAPPING: Mapping = {
+    # Standard XInput buttons – unmapped by default (see the warning in
+    # constants.py about double input before assigning these).
+    "A": "", "B": "", "X": "", "Y": "",
+    "DPad Up": "", "DPad Down": "", "DPad Left": "", "DPad Right": "",
+    "LB": "", "RB": "", "LT": "", "RT": "",
+    "STICK-L": "", "STICK-R": "",
+    "Select": "", "Start": "",
+
+    # Original v1 extras – keep their existing defaults.
     "M1":     "f13",
     "M2":     "f14",
     "M3":     "f15",
     "M4":     "f16",
-    "LM":     "mouse4",
-    "RM":     "mouse5",
-    "C":      "home",
-    "Z":      "end",
-    "Home":   "",       # empty string = unmapped
+    "LM":     "f17",
+    "RM":     "f18",
+    "C":      "",
+    "Z":      "",
+    "Home":   "",
     "Arrow":  "",
     "Circle": "",
 }

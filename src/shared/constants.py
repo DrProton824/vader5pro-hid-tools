@@ -22,7 +22,7 @@ USAGE_PAGE = 0xFFA0   # Vendor-defined usage page (NOT the XInput interface)
 USAGE      = 0x0001
 
 # HID report length observed from hidapitester captures
-REPORT_LENGTH = 64
+REPORT_LENGTH = 32
 
 # ── Button bit layout ─────────────────────────────────────────────────────────
 # Each entry maps  byte_index -> { bitmask -> button_name }

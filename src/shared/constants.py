@@ -105,10 +105,29 @@ ALL_BUTTONS: frozenset[str] = frozenset(
     for name in byte_map.values()
 )
 
-# Buttons the GUI exposes for remapping (the "extra" vendor-only buttons).
-# Standard XInput buttons (A/B/X/Y, bumpers, triggers, sticks, dpad) are
-# intentionally excluded from v1 – they already work via XInput/DirectInput.
+# Buttons the GUI exposes for remapping.
+#
+# v1.2 change: previously this excluded standard XInput buttons (A/B/X/Y,
+# bumpers, triggers, sticks, dpad) because they already work via
+# XInput/DirectInput. The new controller artwork makes every physical
+# button clickable, so this now covers everything in ALL_BUTTONS.
+#
+# IMPORTANT: mapping a standard XInput button (A, B, LT, RB, DPad Up, ...)
+# means the physical press will now ALSO fire through XInput as normal –
+# this remapper does not (and cannot, from a second HID interface) suppress
+# the XInput report. Only map these if double input is what you want.
 MAPPABLE_BUTTONS: tuple[str, ...] = (
+    # Face buttons
+    "A", "B", "X", "Y",
+    # D-Pad
+    "DPad Up", "DPad Down", "DPad Left", "DPad Right",
+    # Shoulder
+    "LB", "RB", "LT", "RT",
+    # Sticks (click)
+    "STICK-L", "STICK-R",
+    # Select / Start
+    "Select", "Start",
+    # Macro / extra buttons (original v1 set)
     "M1", "M2", "M3", "M4",
     "LM", "RM",
     "C",  "Z",

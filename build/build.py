@@ -29,6 +29,9 @@ CONFIG = ROOT / "config.json"
 
 SERVICE_ICON = ASSETS / "icons" / "service.ico"
 CONFIG_ICON  = ASSETS / "icons" / "config.ico"
+CONTROLLER_SVG = ASSETS / "controller.svg"
+CONTROLLER_PNG = ASSETS / "controller.png"
+HIT_ZONES_JSON = ASSETS / "hit_zones.json"
 
 
 def _base_args(name: str, entry: Path, icon: Path | None = None) -> list[str]:
@@ -69,6 +72,26 @@ def ensure_icons() -> None:
     run([sys.executable, str(ROOT / "tools" / "generate_icons.py")])
 
 
+def ensure_controller_png() -> None:
+    """Re-render controller.svg -> controller.png if the SVG changed."""
+    if not CONTROLLER_SVG.exists():
+        return
+    if CONTROLLER_PNG.exists() and CONTROLLER_PNG.stat().st_mtime >= CONTROLLER_SVG.stat().st_mtime:
+        return
+    print("controller.svg changed - re-rendering controller.png...")
+    run([sys.executable, str(ROOT / "tools" / "render_controller_png.py")])
+
+
+def ensure_hit_zones() -> None:
+    """Re-derive assets/hit_zones.json if the SVG changed."""
+    if not CONTROLLER_SVG.exists():
+        return
+    if HIT_ZONES_JSON.exists() and HIT_ZONES_JSON.stat().st_mtime >= CONTROLLER_SVG.stat().st_mtime:
+        return
+    print("controller.svg changed - re-deriving hit_zones.json...")
+    run([sys.executable, str(ROOT / "tools" / "generate_hit_zones.py")])
+
+
 def build_service() -> None:
     run(_base_args(
         "VaderService",
@@ -103,6 +126,8 @@ def copy_runtime_files() -> None:
 
 def main() -> None:
     ensure_icons()
+    ensure_controller_png()
+    ensure_hit_zones()
     build_service()
     build_config_gui()
     copy_runtime_files()

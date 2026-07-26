@@ -287,7 +287,16 @@ class HIDReaderThread(threading.Thread):
                 continue
 
             report_bytes = bytes(report)
-            current = decode_report(report_bytes)
+            try:
+                current = decode_report(report_bytes)
+            except Exception:
+                # A malformed/unexpected report should never be able to
+                # kill the whole reader thread silently — that's exactly
+                # what happened before (see the fix for the missing
+                # REPORT_MAGIC / REPORT_TYPE_INPUT import): one NameError
+                # on the first report read after opening the device left
+                # the thread dead and the tray permanently "disconnected".
+                continue
             if current is None:
                 continue  # heartbeat/status/LED-response report, not button data
             self._emit_deltas(current)

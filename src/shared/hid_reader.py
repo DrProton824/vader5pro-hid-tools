@@ -48,6 +48,8 @@ from .constants import (
     PRODUCT_ID,
     RECONNECT_DELAY_SECONDS,
     REPORT_LENGTH,
+    REPORT_MAGIC,
+    REPORT_TYPE_INPUT,
     STOP_COMMAND,
     USAGE_PAGE,
     VENDOR_ID,

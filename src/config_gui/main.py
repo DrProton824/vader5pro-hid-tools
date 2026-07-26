@@ -258,7 +258,7 @@ class TitleBar(tk.Frame):
     def __init__(self, parent, root: tk.Tk, title: str, version: str, **kwargs):
         super().__init__(parent, bg=C["titlebar"], height=self.HEIGHT, **kwargs)
         self.pack_propagate(False)
-        self._root = root
+        self._app_root = root
         self._drag_origin: Optional[tuple[int, int]] = None
 
         left = tk.Frame(self, bg=C["titlebar"])
@@ -317,7 +317,7 @@ class TitleBar(tk.Frame):
 
     def _start_drag(self, event: tk.Event) -> None:
         self._drag_origin = (event.x_root, event.y_root)
-        self._win_origin = (self._root.winfo_x(), self._root.winfo_y())
+        self._win_origin = (self._app_root.winfo_x(), self._app_root.winfo_y())
 
     def _do_drag(self, event: tk.Event) -> None:
         if self._drag_origin is None:
@@ -326,15 +326,15 @@ class TitleBar(tk.Frame):
         dy = event.y_root - self._drag_origin[1]
         x = self._win_origin[0] + dx
         y = self._win_origin[1] + dy
-        self._root.geometry(f"+{x}+{y}")
+        self._app_root.geometry(f"+{x}+{y}")
 
     # ── Buttons ──────────────────────────────────────────────────────────────
 
     def _on_minimize(self) -> None:
-        self._root.iconify()
+        self._app_root.iconify()
 
     def _on_close(self) -> None:
-        self._root.destroy()
+        self._app_root.destroy()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

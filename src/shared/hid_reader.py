@@ -58,7 +58,7 @@ from .constants import (
 # Windows/hidapi. Flip to True only to experiment with reliability around
 # cold-plug / resume-from-sleep; verify with tools/monitoring_buttons.py
 # first if reports stop arriving after enabling it.
-SEND_VENDOR_HANDSHAKE = False
+SEND_VENDOR_HANDSHAKE = True
 
 
 def _send_command(device: "hid.device", command: tuple[int, ...]) -> None:
@@ -157,10 +157,12 @@ class HIDReaderThread(threading.Thread):
         self,
         callback: EventCallback,
         on_connection_change: Optional[Callable[[bool], None]] = None,
+        send_handshake: bool = DEFAULT_SEND_VENDOR_HANDSHAKE,
     ) -> None:
         super().__init__(name="HIDReader", daemon=True)
         self._callback = callback
         self._on_connection_change = on_connection_change
+        self._send_handshake = send_handshake
         self._stop_event = threading.Event()
 
         # Raw state from the previous HID report.
@@ -211,7 +213,7 @@ class HIDReaderThread(threading.Thread):
                 self._read_loop(device)
             finally:
                 self._set_connected(False)
-                if SEND_VENDOR_HANDSHAKE:
+                if self._send_handshake:
                     _send_command(device, STOP_COMMAND)
                 try:
                     device.close()
@@ -257,7 +259,7 @@ class HIDReaderThread(threading.Thread):
             # Non-blocking mode is NOT used: blocking read() is more efficient
             # because the OS wakes us only when data arrives.
             device.set_nonblocking(False)
-            if SEND_VENDOR_HANDSHAKE:
+            if self._send_handshake:
                 for command in INIT_COMMANDS:
                     _send_command(device, command)
             return device

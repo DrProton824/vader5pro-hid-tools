@@ -553,6 +553,17 @@ class TrayIcon:
         self._tooltip = f"{self._base_tooltip} \u2013 {state}"[:127]
         self._update_tooltip()
 
+    def update_menu_item(self, index: int, label: str) -> None:
+        """
+        Thread-safe enough for our use (single writer, called from the
+        same click handler that owns the toggle): replace a menu item's
+        label while keeping its callback, so the next time the menu is
+        opened it reflects the new state (e.g. a checkbox-style toggle).
+        """
+        if 0 <= index < len(self._menu_items):
+            _label, callback = self._menu_items[index]
+            self._menu_items[index] = (label, callback)
+            
     # ── Window / icon setup ──────────────────────────────────────────────
 
     def _create_window(self) -> None:

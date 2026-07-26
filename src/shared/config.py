@@ -41,6 +41,20 @@ CONFIG_PATH = _find_config_path()
 # A mapping is just  { button_name: shortcut_string }
 # e.g. { "M1": "f13", "M2": "ctrl+shift+p" }
 Mapping = dict[str, str]
+Settings = dict[str, object]
+
+# Reserved top-level key for app settings unrelated to button mapping.
+# Button names are always plain strings from MAPPABLE_BUTTONS, so this
+# can never collide with a real button key.
+SETTINGS_KEY = "_settings"
+
+DEFAULT_SETTINGS: Settings = {
+    # Sends the recovered vendor init/stop handshake before/after reading
+    # the HID interface. Confirmed necessary on Vader 5 Pro profiles that
+    # have no macro/extra button currently assigned in the Flydigi
+    # software — without it the vendor (0xFFA0) interface stays silent.
+    "vendor_handshake": True,
+}
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 # Shipped in the repo so a first run works without opening the GUI.
@@ -91,22 +105,15 @@ def load() -> Mapping:
     return mapping
 
 
-def save(mapping: Mapping) -> None:
-    """
-    Write mapping to disk atomically.
+def _read_raw() -> dict:
+    try:
+        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return {}
 
-    Uses a temp file in the same directory so the rename is on the same
-    filesystem (avoids cross-device link errors on some Windows setups).
-    """
-    # Validate before touching disk
-    for button in mapping:
-        if button not in MAPPABLE_BUTTONS:
-            raise ValueError(f"Unknown button: {button!r}")
 
-    data = {btn: mapping.get(btn, "") for btn in MAPPABLE_BUTTONS}
-    text = json.dumps(data, indent=2)
-
-    # Atomic write
+def _atomic_write(text: str) -> None:
+    """Write text to CONFIG_PATH atomically (temp file + rename)."""
     dir_ = CONFIG_PATH.parent
     fd, tmp_path = tempfile.mkstemp(dir=dir_, suffix=".tmp", text=True)
     try:
@@ -114,12 +121,56 @@ def save(mapping: Mapping) -> None:
             fh.write(text)
         os.replace(tmp_path, CONFIG_PATH)  # atomic on Windows (same volume)
     except Exception:
-        # Clean up temp file if rename failed
         try:
             os.unlink(tmp_path)
         except OSError:
             pass
         raise
+
+
+def save(mapping: Mapping) -> None:
+    """
+    Write mapping to disk atomically.
+
+    Preserves any existing ``_settings`` block – this used to rewrite the
+    file with only button keys, which silently dropped settings on every
+    autosave triggered from the config GUI.
+    """
+    for button in mapping:
+        if button not in MAPPABLE_BUTTONS:
+            raise ValueError(f"Unknown button: {button!r}")
+
+    existing_raw = _read_raw()
+    data = {btn: mapping.get(btn, "") for btn in MAPPABLE_BUTTONS}
+    if SETTINGS_KEY in existing_raw:
+        data[SETTINGS_KEY] = existing_raw[SETTINGS_KEY]
+
+    _atomic_write(json.dumps(data, indent=2))
+
+
+def load_settings() -> Settings:
+    """Return current settings, falling back to defaults for missing keys."""
+    raw = _read_raw()
+    stored = raw.get(SETTINGS_KEY, {})
+    settings = dict(DEFAULT_SETTINGS)
+    if isinstance(stored, dict):
+        settings.update(stored)
+    return settings
+
+
+def save_settings(settings: Settings) -> None:
+    """Write settings atomically, preserving the current button mapping."""
+    existing_raw = _read_raw()
+    data = {
+        btn: existing_raw.get(btn, DEFAULT_MAPPING.get(btn, ""))
+        for btn in MAPPABLE_BUTTONS
+    }
+    merged = dict(DEFAULT_SETTINGS)
+    merged.update(existing_raw.get(SETTINGS_KEY, {}))
+    merged.update(settings)
+    data[SETTINGS_KEY] = merged
+
+    _atomic_write(json.dumps(data, indent=2))
 
 
 class ConfigWatcher:

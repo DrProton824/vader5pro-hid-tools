@@ -46,6 +46,7 @@ from __future__ import annotations
 
 import ctypes
 import io
+import json
 import pathlib
 import sys
 import tkinter as tk
@@ -75,12 +76,23 @@ from src.shared.constants import MAPPABLE_BUTTONS
 try:
     import cairosvg          # type: ignore
     from PIL import Image, ImageTk  # type: ignore
-    _SVG_OK = True
+    _CAIROSVG_OK = True
 except ImportError:
-    _SVG_OK = False
+    _CAIROSVG_OK = False
 
 _SVG_PATH = _ROOT / "assets" / "controller.svg"
+_PNG_PATH = _ROOT / "assets" / "controller.png"
+_HIT_ZONES_JSON_PATH = _ROOT / "assets" / "hit_zones.json"
 _ICON_PATH = _ROOT / "assets" / "icons" / "config.ico"
+
+
+def _load_svg_derived_zones() -> dict[str, tuple[float, float, float, float]]:
+    """Read the pre-derived button bounding boxes (see tools/generate_hit_zones.py)."""
+    try:
+        raw = json.loads(_HIT_ZONES_JSON_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, OSError, ValueError):
+        return {}
+    return {k: tuple(v) for k, v in raw.items()}
 
 MUTEX_NAME = "VaderRemapperConfig"
 
@@ -174,6 +186,31 @@ HIT_ZONES: dict[str, dict] = {
     "Arrow":  {"shape": "circle", "coords": (664, 684, 22), "label_xy": (664, 655)},
     "Circle": {"shape": "circle", "coords": (612, 684, 22), "label_xy": (612, 715)},
 }
+
+def _resolve_hit_zones() -> dict[str, dict]:
+    """
+    Prefer bounding boxes read straight from controller.svg's own
+    labelled shapes (assets/hit_zones.json); fall back to the manual
+    HIT_ZONES table only for buttons the artwork doesn't unambiguously
+    provide yet (currently: Home, Arrow, Circle).
+    """
+    derived = _load_svg_derived_zones()
+    resolved: dict[str, dict] = {}
+    for button, manual in HIT_ZONES.items():
+        bbox = derived.get(button)
+        if bbox:
+            min_x, min_y, max_x, max_y = bbox
+            resolved[button] = {
+                "shape": "rect",
+                "coords": (min_x, min_y, max_x - min_x, max_y - min_y),
+                "label_xy": ((min_x + max_x) / 2, (min_y + max_y) / 2),
+            }
+        else:
+            resolved[button] = manual
+    return resolved
+
+
+RESOLVED_HIT_ZONES: dict[str, dict] = _resolve_hit_zones()
 
 # ── Modifier normalisation ────────────────────────────────────────────────────
 _MOD_KEYSYMS = frozenset({
@@ -386,13 +423,31 @@ class ControllerCanvas(tk.Canvas):
     # ── Background ────────────────────────────────────────────────────────────
 
     def _draw_background(self) -> None:
-        """Render SVG to canvas, or draw a simple schematic fallback."""
-        if _SVG_OK and _SVG_PATH.exists():
-            self._render_svg()
-        else:
-            self._render_fallback()
+        """
+        Prefer the pre-rendered PNG (tools/render_controller_png.py),
+        loaded via tkinter's built-in PNG support - no cairosvg/Pillow/
+        native cairo DLL needed, so this always works in the packaged
+        .exe. Falls back to live cairosvg rendering only for developers
+        running from source with an SVG newer than the last render, and
+        to the schematic placeholder as a last resort.
+        """
+        if self._load_prerendered_png():
+            return
+        if _CAIROSVG_OK and _SVG_PATH.exists() and self._render_svg_live():
+            return
+        self._render_fallback()
 
-    def _render_svg(self) -> None:
+    def _load_prerendered_png(self) -> bool:
+        if not _PNG_PATH.exists():
+            return False
+        try:
+            self._bg_image = tk.PhotoImage(file=str(_PNG_PATH))
+            self.create_image(0, 0, anchor="nw", image=self._bg_image)
+            return True
+        except Exception:
+            return False
+
+    def _render_svg_live(self) -> bool:
         try:
             png = cairosvg.svg2png(
                 url=str(_SVG_PATH),
@@ -402,8 +457,9 @@ class ControllerCanvas(tk.Canvas):
             img = Image.open(io.BytesIO(png))
             self._bg_image = ImageTk.PhotoImage(img)
             self.create_image(0, 0, anchor="nw", image=self._bg_image)
+            return True
         except Exception:
-            self._render_fallback()
+            return False
 
     def _render_fallback(self) -> None:
         """
@@ -422,7 +478,7 @@ class ControllerCanvas(tk.Canvas):
             fill=C["surface2"], outline="",
         )
 
-        for button, zone in HIT_ZONES.items():
+        for button, zone in RESOLVED_HIT_ZONES.items():
             shape = zone["shape"]
             coords = zone["coords"]
 
@@ -451,7 +507,7 @@ class ControllerCanvas(tk.Canvas):
     # ── Hit zones ─────────────────────────────────────────────────────────────
 
     def _draw_zones(self) -> None:
-        for button, zone in HIT_ZONES.items():
+        for button, zone in RESOLVED_HIT_ZONES.items():
             if button not in MAPPABLE_BUTTONS:
                 continue
             self._draw_zone(button, zone)

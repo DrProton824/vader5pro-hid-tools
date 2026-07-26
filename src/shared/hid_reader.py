@@ -58,7 +58,7 @@ from .constants import (
 # Windows/hidapi. Flip to True only to experiment with reliability around
 # cold-plug / resume-from-sleep; verify with tools/monitoring_buttons.py
 # first if reports stop arriving after enabling it.
-SEND_VENDOR_HANDSHAKE = True
+DEFAULT_SEND_VENDOR_HANDSHAKE = True
 
 
 def _send_command(device: "hid.device", command: tuple[int, ...]) -> None:

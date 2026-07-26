@@ -168,6 +168,7 @@ WS_EX_TOOLWINDOW = 0x00000080
 SW_SHOWNOACTIVATE = 4
 
 DEFAULT_GUI_FONT = 17
+NULL_PEN = 8
 
 # LRESULT/WPARAM/LPARAM are pointer-sized (64-bit) on x64 Windows.
 # ctypes.c_long is always 32-bit regardless of platform, so declaring
@@ -195,6 +196,8 @@ _COLOR_TEXT = _rgb(0xC8, 0xD8, 0xE8)
 _COLOR_TEXT_SELECTED = _rgb(0xE8, 0xF0, 0xF8)
 _COLOR_TEXT_DIM = _rgb(0x5A, 0x7A, 0x9A)
 _COLOR_BORDER = _rgb(0x3A, 0x5A, 0x8A)
+_COLOR_STATUS_ON = _rgb(0x3D, 0xD0, 0x7A)   # LED-style dot: controller connected
+_COLOR_STATUS_OFF = _rgb(0xD0, 0x46, 0x46)  # LED-style dot: controller not connected
 
 
 class WNDCLASS(ctypes.Structure):
@@ -302,6 +305,9 @@ gdi32.SelectObject.restype = ctypes.c_void_p
 gdi32.GetStockObject.argtypes = [ctypes.c_int]
 gdi32.GetStockObject.restype = ctypes.c_void_p
 
+gdi32.Ellipse.argtypes = [wt.HDC, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int]
+gdi32.Ellipse.restype = wt.BOOL
+
 gdi32.CreateFontIndirectW.argtypes = [ctypes.c_void_p]
 gdi32.CreateFontIndirectW.restype = ctypes.c_void_p
 
@@ -351,6 +357,8 @@ _ITEM_HEIGHT = 26
 _SEPARATOR_HEIGHT = 7
 _PAD_X = 16
 _MIN_WIDTH = 170
+_DOT_SIZE = 8
+_DOT_TEXT_GAP = 8
 
 _MENU_CLASS_NAME = "VaderRemapperMenuWndClass"
 _menu_class_registered = False
@@ -403,7 +411,14 @@ class _MenuPopup:
     clicked, Escape is pressed, or it loses activation (click elsewhere).
     """
 
-    def __init__(self, items: list[tuple[str, Optional[Callable[[], None]]]]):
+    def __init__(
+        self,
+        items: list[tuple[str, Optional[Callable[[], None]], Optional[bool]]],
+    ):
+        # Each item is (label, callback, status_dot). status_dot is None
+        # for ordinary rows/separators, or True/False to draw a small
+        # coloured dot before the label (used only for the connection
+        # status row) - green for True, red for False.
         self._items = items
         self._hwnd: Optional[int] = None
         self._hot_index = -1
@@ -418,18 +433,19 @@ class _MenuPopup:
         hdc = user32.GetDC(None)
         gdi32.SelectObject(hdc, self._font)
         max_text_w = 0
-        for label, _cb in self._items:
+        for label, _cb, dot in self._items:
             if label is MENU_SEPARATOR:
                 continue
             size = SIZE()
             gdi32.GetTextExtentPoint32W(hdc, label, len(label), ctypes.byref(size))
-            max_text_w = max(max_text_w, size.cx)
+            extra = (_DOT_SIZE + _DOT_TEXT_GAP) if dot is not None else 0
+            max_text_w = max(max_text_w, size.cx + extra)
         user32.ReleaseDC(None, hdc)
         self._width = max(_MIN_WIDTH, max_text_w + _PAD_X * 2)
 
         y = 4
         self._item_rects = []
-        for label, _cb in self._items:
+        for label, _cb, _dot in self._items:
             row_h = _SEPARATOR_HEIGHT if label is MENU_SEPARATOR else _ITEM_HEIGHT
             self._item_rects.append((0, y, self._width, y + row_h))
             y += row_h
@@ -533,7 +549,7 @@ class _MenuPopup:
         gdi32.SelectObject(hdc, self._font)
         gdi32.SetBkMode(hdc, 1)  # TRANSPARENT
 
-        for i, (label, cb) in enumerate(self._items):
+        for i, (label, cb, dot) in enumerate(self._items):
             l, t, r, b = self._item_rects[i]
 
             if label is MENU_SEPARATOR:
@@ -561,7 +577,24 @@ class _MenuPopup:
                 text_color = _COLOR_TEXT
             gdi32.SetTextColor(hdc, text_color)
 
-            text_rc = wt.RECT(l + _PAD_X, t, r - _PAD_X, b)
+            text_left = l + _PAD_X
+            if dot is not None:
+                dot_color = _COLOR_STATUS_ON if dot else _COLOR_STATUS_OFF
+                mid_y = (t + b) // 2
+                dot_top = mid_y - _DOT_SIZE // 2
+                dot_brush = gdi32.CreateSolidBrush(dot_color)
+                old_brush = gdi32.SelectObject(hdc, dot_brush)
+                old_pen = gdi32.SelectObject(hdc, gdi32.GetStockObject(NULL_PEN))
+                gdi32.Ellipse(
+                    hdc, l + _PAD_X, dot_top,
+                    l + _PAD_X + _DOT_SIZE, dot_top + _DOT_SIZE,
+                )
+                gdi32.SelectObject(hdc, old_pen)
+                gdi32.SelectObject(hdc, old_brush)
+                gdi32.DeleteObject(dot_brush)
+                text_left = l + _PAD_X + _DOT_SIZE + _DOT_TEXT_GAP
+
+            text_rc = wt.RECT(text_left, t, r - _PAD_X, b)
             user32.DrawTextW(
                 hdc, label, -1, ctypes.byref(text_rc),
                 DT_SINGLELINE | DT_VCENTER | DT_LEFT,
@@ -594,6 +627,7 @@ class TrayIcon:
         self._nid: Optional[NOTIFYICONDATA] = None
         self._running = False
         self._status_line = "Checking connection\u2026"
+        self._status_connected: Optional[bool] = None
         self._tooltip = tooltip[:127]
         self._popup: Optional[_MenuPopup] = None
         # Keep a reference to the WNDPROC closure alive for the object's
@@ -625,13 +659,14 @@ class TrayIcon:
     def update_status(self, connected: bool) -> None:
         """
         Thread-safe: reflect controller connection state in the tray
-        tooltip and the (non-clickable) status line at the top of the menu.
+        tooltip and the status line at the top of the menu, which shows a
+        small green/red dot (see _MenuPopup._on_paint) rather than a
+        plain glyph.
         Safe to call before run() – the values are just cached until the
         icon actually exists.
         """
-        self._status_line = (
-            "\u25CF Controller connected" if connected else "\u25CB Controller not connected"
-        )
+        self._status_line = "Controller connected" if connected else "Controller not connected"
+        self._status_connected = connected
         state = "Connected" if connected else "Disconnected"
         self._tooltip = f"{self._base_tooltip} \u2013 {state}"[:127]
         self._update_tooltip()
@@ -718,10 +753,10 @@ class TrayIcon:
             self._popup = None
             return
 
-        items: list[tuple[str, Optional[Callable[[], None]]]] = [
-            (self._status_line, None),
-            (MENU_SEPARATOR, None),
-        ] + self._menu_items
+        items: list[tuple[str, Optional[Callable[[], None]], Optional[bool]]] = [
+            (self._status_line, None, self._status_connected),
+            (MENU_SEPARATOR, None, None),
+        ] + [(label, callback, None) for label, callback in self._menu_items]
 
         pt = wt.POINT()
         user32.GetCursorPos(ctypes.byref(pt))

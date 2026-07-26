@@ -98,6 +98,53 @@ WM_KEYDOWN = 0x0100
 WA_INACTIVE = 0
 VK_ESCAPE = 0x1B
 
+CS_DROPSHADOW = 0x00020000
+SPI_GETNONCLIENTMETRICS = 0x0029
+
+
+class LOGFONTW(ctypes.Structure):
+    _fields_ = [
+        ("lfHeight", ctypes.c_long),
+        ("lfWidth", ctypes.c_long),
+        ("lfEscapement", ctypes.c_long),
+        ("lfOrientation", ctypes.c_long),
+        ("lfWeight", ctypes.c_long),
+        ("lfItalic", ctypes.c_byte),
+        ("lfUnderline", ctypes.c_byte),
+        ("lfStrikeOut", ctypes.c_byte),
+        ("lfCharSet", ctypes.c_byte),
+        ("lfOutPrecision", ctypes.c_byte),
+        ("lfClipPrecision", ctypes.c_byte),
+        ("lfQuality", ctypes.c_byte),
+        ("lfPitchAndFamily", ctypes.c_byte),
+        ("lfFaceName", ctypes.c_wchar * 32),
+    ]
+
+
+class NONCLIENTMETRICSW(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", ctypes.c_uint),
+        ("iBorderWidth", ctypes.c_int),
+        ("iScrollWidth", ctypes.c_int),
+        ("iScrollHeight", ctypes.c_int),
+        ("iCaptionWidth", ctypes.c_int),
+        ("iCaptionHeight", ctypes.c_int),
+        ("lfCaptionFont", LOGFONTW),
+        ("iSmCaptionWidth", ctypes.c_int),
+        ("iSmCaptionHeight", ctypes.c_int),
+        ("lfSmCaptionFont", LOGFONTW),
+        ("iMenuWidth", ctypes.c_int),
+        ("iMenuHeight", ctypes.c_int),
+        ("lfMenuFont", LOGFONTW),
+        ("lfStatusFont", LOGFONTW),
+        ("lfMessageFont", LOGFONTW),
+    ]
+
+
+# Sentinel used in the items list to render a thin separator line instead
+# of a clickable row, matching the header/body split of native context menus.
+MENU_SEPARATOR = object()
+
 NIM_ADD = 0x00000000
 NIM_MODIFY = 0x00000001
 NIM_DELETE = 0x00000002
@@ -255,6 +302,27 @@ gdi32.SelectObject.restype = ctypes.c_void_p
 gdi32.GetStockObject.argtypes = [ctypes.c_int]
 gdi32.GetStockObject.restype = ctypes.c_void_p
 
+gdi32.CreateFontIndirectW.argtypes = [ctypes.c_void_p]
+gdi32.CreateFontIndirectW.restype = ctypes.c_void_p
+
+user32.SystemParametersInfoW.argtypes = [
+    ctypes.c_uint, ctypes.c_uint, ctypes.c_void_p, ctypes.c_uint,
+]
+user32.SystemParametersInfoW.restype = wt.BOOL
+
+
+def _get_menu_font() -> int:
+    """Return an HFONT matching the current OS context-menu font/size."""
+    ncm = NONCLIENTMETRICSW()
+    ncm.cbSize = ctypes.sizeof(NONCLIENTMETRICSW)
+    if user32.SystemParametersInfoW(
+        SPI_GETNONCLIENTMETRICS, ncm.cbSize, ctypes.byref(ncm), 0
+    ):
+        hfont = gdi32.CreateFontIndirectW(ctypes.byref(ncm.lfMenuFont))
+        if hfont:
+            return hfont
+    return gdi32.GetStockObject(DEFAULT_GUI_FONT)
+
 user32.CreateWindowExW.argtypes = [
     wt.DWORD, ctypes.c_wchar_p, ctypes.c_wchar_p, wt.DWORD,
     ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
@@ -279,7 +347,8 @@ user32.DefWindowProcW.restype = LRESULT
 #  nothing left for the OS to silently override.
 # ═══════════════════════════════════════════════════════════════════════════
 
-_ITEM_HEIGHT = 28
+_ITEM_HEIGHT = 26
+_SEPARATOR_HEIGHT = 7
 _PAD_X = 16
 _MIN_WIDTH = 170
 
@@ -311,7 +380,7 @@ def _ensure_menu_class_registered() -> None:
         return
     hinstance = kernel32.GetModuleHandleW(None)
     wc = WNDCLASS()
-    wc.style = 0
+    wc.style = CS_DROPSHADOW
     wc.lpfnWndProc = _menu_trampoline_ref
     wc.cbClsExtra = 0
     wc.cbWndExtra = 0
@@ -341,7 +410,7 @@ class _MenuPopup:
         self._item_rects: list[tuple[int, int, int, int]] = []
         self._width = _MIN_WIDTH
         self._height = 0
-        self._font = gdi32.GetStockObject(DEFAULT_GUI_FONT)
+        self._font = _get_menu_font()
 
     # ── Layout / show ───────────────────────────────────────────────────
 
@@ -350,6 +419,8 @@ class _MenuPopup:
         gdi32.SelectObject(hdc, self._font)
         max_text_w = 0
         for label, _cb in self._items:
+            if label is MENU_SEPARATOR:
+                continue
             size = SIZE()
             gdi32.GetTextExtentPoint32W(hdc, label, len(label), ctypes.byref(size))
             max_text_w = max(max_text_w, size.cx)
@@ -358,9 +429,10 @@ class _MenuPopup:
 
         y = 4
         self._item_rects = []
-        for _label, _cb in self._items:
-            self._item_rects.append((0, y, self._width, y + _ITEM_HEIGHT))
-            y += _ITEM_HEIGHT
+        for label, _cb in self._items:
+            row_h = _SEPARATOR_HEIGHT if label is MENU_SEPARATOR else _ITEM_HEIGHT
+            self._item_rects.append((0, y, self._width, y + row_h))
+            y += row_h
         self._height = y + 4
 
     def show(self, x: int, y: int) -> None:
@@ -403,6 +475,8 @@ class _MenuPopup:
     def _index_at(self, x: int, y: int) -> int:
         for i, (l, t, r, b) in enumerate(self._item_rects):
             if l <= x < r and t <= y < b:
+                if self._items[i][0] is MENU_SEPARATOR:
+                    return -1
                 return i
         return -1
 
@@ -461,6 +535,15 @@ class _MenuPopup:
 
         for i, (label, cb) in enumerate(self._items):
             l, t, r, b = self._item_rects[i]
+
+            if label is MENU_SEPARATOR:
+                mid_y = (t + b) // 2
+                sep_rc = wt.RECT(l + 4, mid_y, r - 4, mid_y + 1)
+                sep_brush = gdi32.CreateSolidBrush(_COLOR_BORDER)
+                user32.FillRect(hdc, ctypes.byref(sep_rc), sep_brush)
+                gdi32.DeleteObject(sep_brush)
+                continue
+
             disabled = cb is None
             selected = (i == self._hot_index) and not disabled
 
@@ -636,7 +719,8 @@ class TrayIcon:
             return
 
         items: list[tuple[str, Optional[Callable[[], None]]]] = [
-            (self._status_line, None)
+            (self._status_line, None),
+            (MENU_SEPARATOR, None),
         ] + self._menu_items
 
         pt = wt.POINT()

@@ -62,6 +62,17 @@ from .constants import (
 # first if reports stop arriving after enabling it.
 DEFAULT_SEND_VENDOR_HANDSHAKE = True
 
+# How long to go with zero HID reports (of any kind) before treating the
+# controller as not actually connected and resending the vendor
+# handshake. Opening the vendor (0xFFA0) interface succeeds as soon as
+# the USB dongle is present, whether or not the physical controller is
+# actually powered on/paired to it — so a one-shot handshake sent right
+# at open() can go nowhere if the controller was off at the time and
+# gets turned on afterwards. This must stay comfortably above normal
+# report cadence (continuous while the controller is on) so it never
+# fires during ordinary use.
+NO_REPORT_TIMEOUT_SECONDS = 3.0
+
 
 def _send_command(device: "hid.device", command: tuple[int, ...]) -> None:
     """
@@ -209,7 +220,12 @@ class HIDReaderThread(threading.Thread):
                 self._stop_event.wait(timeout=RECONNECT_DELAY_SECONDS)
                 continue
 
-            self._set_connected(True)
+            # Deliberately NOT calling _set_connected(True) here: opening
+            # the dongle's HID interface succeeds even when the physical
+            # controller itself is off / unpaired, so "the handle opened"
+            # is not proof anything is actually connected. Only
+            # _read_loop calls _set_connected(True), and only once it has
+            # actually seen a report.
 
             try:
                 self._read_loop(device)
@@ -272,7 +288,21 @@ class HIDReaderThread(threading.Thread):
         """
         Block on read() forever, emit events on state changes.
         Exits when the device disconnects or stop() is called.
+
+        Handshake retry
+        ────────────────
+        See NO_REPORT_TIMEOUT_SECONDS: if the read timeout ticks by with
+        zero reports for that long, treat the controller as not actually
+        connected yet (even though the handle is still open) and resend
+        the handshake, repeating every NO_REPORT_TIMEOUT_SECONDS until
+        real data shows up. This only costs a monotonic() check and an
+        occasional handful of bytes written on top of the 100 ms read
+        timeout we already pay for – no extra thread, no busy loop.
         """
+        now = time.monotonic()
+        last_report_time = now
+        last_handshake_time = now  # _open_device() already sent one
+
         while not self._stop_event.is_set():
             try:
                 # read() blocks until a report arrives or the device disconnects.
@@ -282,20 +312,28 @@ class HIDReaderThread(threading.Thread):
                 # Device disconnected mid-session.
                 break
 
+            now = time.monotonic()
+
             if not report:
-                # Timeout with no data – loop back to check stop event.
+                if now - last_report_time >= NO_REPORT_TIMEOUT_SECONDS:
+                    self._set_connected(False)
+                    if (
+                        self._send_handshake
+                        and now - last_handshake_time >= NO_REPORT_TIMEOUT_SECONDS
+                    ):
+                        for command in INIT_COMMANDS:
+                            _send_command(device, command)
+                        last_handshake_time = now
                 continue
+
+            # Real data arrived - the physical controller is actually there.
+            last_report_time = now
+            self._set_connected(True)
 
             report_bytes = bytes(report)
             try:
                 current = decode_report(report_bytes)
             except Exception:
-                # A malformed/unexpected report should never be able to
-                # kill the whole reader thread silently — that's exactly
-                # what happened before (see the fix for the missing
-                # REPORT_MAGIC / REPORT_TYPE_INPUT import): one NameError
-                # on the first report read after opening the device left
-                # the thread dead and the tray permanently "disconnected".
                 continue
             if current is None:
                 continue  # heartbeat/status/LED-response report, not button data

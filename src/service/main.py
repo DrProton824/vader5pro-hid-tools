@@ -92,6 +92,7 @@ def main() -> None:
 
     # ── Bootstrap ─────────────────────────────────────────────────────────────
     mapping = cfg.load()
+    settings = cfg.load_settings()
 
     sender = InputSender()
     mapper = ButtonMapper(sender)
@@ -104,11 +105,43 @@ def main() -> None:
         if icon is not None:
             icon.update_status(connected)
 
-    reader = HIDReaderThread(
-        callback=mapper.handle_event,
-        on_connection_change=_on_connection_change,
-    )
-    reader.start()
+    # Vendor init/stop handshake – on by default (see hid_reader.py),
+    # but kept toggleable from the tray in case a future controller
+    # firmware/profile combination needs it off.
+    state: dict[str, object] = {
+        "handshake": bool(settings.get("vendor_handshake", True)),
+    }
+
+    def _make_reader() -> HIDReaderThread:
+        new_reader = HIDReaderThread(
+            callback=mapper.handle_event,
+            on_connection_change=_on_connection_change,
+            send_handshake=bool(state["handshake"]),
+        )
+        new_reader.start()
+        return new_reader
+
+    state["reader"] = _make_reader()
+
+    HANDSHAKE_MENU_INDEX = 1  # position in the menu_items list below
+
+    def _handshake_label(enabled: bool) -> str:
+        return ("\u2713" if enabled else "\u2610") + " Vendor Handshake"
+
+    def _toggle_handshake() -> None:
+        state["handshake"] = not state["handshake"]
+        cfg.save_settings({"vendor_handshake": state["handshake"]})
+
+        old_reader = state["reader"]
+        old_reader.stop()
+        old_reader.join(timeout=2.0)
+        state["reader"] = _make_reader()
+
+        icon = icon_holder.get("icon")
+        if icon is not None:
+            icon.update_menu_item(
+                HANDSHAKE_MENU_INDEX, _handshake_label(bool(state["handshake"]))
+            )
 
     stop_event = threading.Event()
 
@@ -144,7 +177,7 @@ def main() -> None:
 
     def _quit() -> None:
         stop_event.set()
-        reader.stop()
+        state["reader"].stop()
         icon_holder["icon"].stop()
 
     icon = TrayIcon(
@@ -152,6 +185,7 @@ def main() -> None:
         icon_path=_ROOT / "assets" / "icons" / "service.ico",
         menu_items=[
             ("Open Config", _open_config),
+            (_handshake_label(bool(state["handshake"])), _toggle_handshake),
             ("Exit", _quit),
         ],
     )
@@ -162,8 +196,8 @@ def main() -> None:
         icon.run()  # blocks until "Exit" is chosen
     finally:
         stop_event.set()
-        reader.stop()
-        reader.join(timeout=2.0)
+        state["reader"].stop()
+        state["reader"].join(timeout=2.0)
 
 
 if __name__ == "__main__":

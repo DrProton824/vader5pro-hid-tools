@@ -259,7 +259,6 @@ class TitleBar(tk.Frame):
         super().__init__(parent, bg=C["titlebar"], height=self.HEIGHT, **kwargs)
         self.pack_propagate(False)
         self._app_root = root
-        self._drag_origin: Optional[tuple[int, int]] = None
 
         left = tk.Frame(self, bg=C["titlebar"])
         left.pack(side="left", fill="y", padx=(14, 0))
@@ -290,8 +289,7 @@ class TitleBar(tk.Frame):
 
         # Dragging: bind on the bar itself and the (non-interactive) labels.
         for widget in (self, left):
-            widget.bind("<ButtonPress-1>", self._start_drag)
-            widget.bind("<B1-Motion>", self._do_drag)
+            widget.bind("<ButtonPress-1>", self._start_native_drag)
 
     def _make_button(self, parent, symbol: str, hover_bg: str, command) -> tk.Label:
         btn = tk.Label(
@@ -315,18 +313,24 @@ class TitleBar(tk.Frame):
 
     # ── Drag to move ─────────────────────────────────────────────────────────
 
-    def _start_drag(self, event: tk.Event) -> None:
-        self._drag_origin = (event.x_root, event.y_root)
-        self._win_origin = (self._app_root.winfo_x(), self._app_root.winfo_y())
-
-    def _do_drag(self, event: tk.Event) -> None:
-        if self._drag_origin is None:
-            return
-        dx = event.x_root - self._drag_origin[0]
-        dy = event.y_root - self._drag_origin[1]
-        x = self._win_origin[0] + dx
-        y = self._win_origin[1] + dy
-        self._app_root.geometry(f"+{x}+{y}")
+    def _start_native_drag(self, event: tk.Event) -> None:
+        """
+        Let Windows perform the move itself (WM_SYSCOMMAND/SC_MOVE),
+        exactly like dragging a native title bar - perfectly smooth,
+        because Windows does the whole drag loop without asking Tk to
+        re-layout anything on every mouse-move.
+        """
+        try:
+            hwnd = ctypes.windll.user32.GetParent(self._app_root.winfo_id())
+            ctypes.windll.user32.ReleaseCapture()
+            WM_SYSCOMMAND = 0x0112
+            SC_MOVE = 0xF010
+            HTCAPTION = 2
+            ctypes.windll.user32.SendMessageW(
+                hwnd, WM_SYSCOMMAND, SC_MOVE | HTCAPTION, 0
+            )
+        except Exception:
+            pass
 
     # ── Buttons ──────────────────────────────────────────────────────────────
 

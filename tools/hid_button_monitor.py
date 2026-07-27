@@ -1,3 +1,9 @@
+# Monitors Vader 5 Pro button input reports from the vendor HID channel
+# (VID 0x37D7 / PID 0x2401, Usage Page 0xFFA0) using hidapitester.exe.
+# Requires hidapitester.exe to be available in the script directory and decodes
+# discovered HID bit fields into button press/release events.
+
+
 import subprocess
 import re
 import time

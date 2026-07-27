@@ -1,3 +1,8 @@
+# HID interface listener for capturing and logging raw reports from the selected
+# VID 0x37D7 / PID 0x2401 device interface. Allows manual interface selection,
+# continuously monitors HID reports, and saves timestamped hexadecimal packet logs.
+
+
 import hid
 import time
 from datetime import datetime

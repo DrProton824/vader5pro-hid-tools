@@ -25,7 +25,7 @@ Action:
 Result:
 
 - Four HID interfaces enumerate after dongle is plugged in.
-- No Traffic/Communication on all 4 HID Interfaces.
+- No traffic/communication on all 4 HID Interfaces.
 
 ---
 
@@ -44,15 +44,15 @@ Result:
 
 Controller is turned ON again:
 
-- All 4 HID interfaces reappear.
-- Traffic/Communication:
+- All four HID interfaces reappear.
+- Traffic/communication:
   - Interface 1:
       Emits a controller startup information sequence automatically.
       Remains mostly idle afterwards.
       Sends heartbeat packets approximately every 30 seconds.
   - Interface 0:
       Begins reporting standard controller input when input changes.
-- No Traffic/Communication observed on Interface 2 and Interface 3.
+- No traffic/communication observed on Interface 2 and Interface 3.
 
 ---
 
@@ -81,8 +81,6 @@ When active, the dongle exposes four HID interfaces.
 |----------|-------|
 | Usage Page | `0x0001` |
 | Usage | `0x0005` |
-
-Observed behaviour:
 
 Observed behaviour:
 
@@ -198,7 +196,7 @@ Report length:
 | Remaining bytes | Zero padding |
 
 
-# Startup Sequence
+## Startup Sequence
 
 Whenever the wireless controller connects, Interface 1 immediately emits an initialization burst **without any host interaction**.
 
@@ -297,8 +295,6 @@ For single-segment (Payload length = 1) 0x01 packets, the decoded firmware field
 
 Example:
 
-Example:
-
 ```
 5A A5 01 01 00
 82 02 00 00 00 00
@@ -334,7 +330,7 @@ interpreted by the parser.
 
 ---
 
-# Vendor Initialization (Handshake) via Interface 1
+## Vendor Initialization (Handshake) via Interface 1
 
 The vendor HID initialization sequence was recovered from the
 reverse-engineered Vader5Protocol implementation in ControlLab:
@@ -382,7 +378,7 @@ producing vendor input reports:
   - M1-M4
   - LM/RM
   - C/Z
-  - Home(Flydigi Logo)
+  - Home (Flydigi logo)
 - Standard buttons:
   - X/Y/A/B
   - Up/Down/Left/Right
@@ -405,7 +401,7 @@ The exact purpose of each initialization command was not further investigated.
 
 ---
 
-# Heartbeat
+## Heartbeat
 
 Packet:
 

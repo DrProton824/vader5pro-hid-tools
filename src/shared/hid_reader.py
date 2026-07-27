@@ -55,23 +55,20 @@ from .constants import (
     VENDOR_ID,
 )
 
-# Off by default: sends third-party-recovered vendor handshake commands
-# before/after reading. Our current decode already works without this on
-# Windows/hidapi. Flip to True only to experiment with reliability around
-# cold-plug / resume-from-sleep; verify with tools/monitoring_buttons.py
-# first if reports stop arriving after enabling it.
+# Enable vendor handshake commands for improved reliability on reconnects.
+# Tested path works without this on Windows/hidapi; enable for cold-plug
+# and resume-from-sleep scenarios.
 DEFAULT_SEND_VENDOR_HANDSHAKE = True
 
-# How long to go with zero HID reports (of any kind) before treating the
-# controller as not actually connected and resending the vendor
-# handshake. Opening the vendor (0xFFA0) interface succeeds as soon as
-# the USB dongle is present, whether or not the physical controller is
-# actually powered on/paired to it — so a one-shot handshake sent right
-# at open() can go nowhere if the controller was off at the time and
-# gets turned on afterwards. This must stay comfortably above normal
-# report cadence (continuous while the controller is on) so it never
-# fires during ordinary use.
-NO_REPORT_TIMEOUT_SECONDS = 3.0
+# Retry the handshake once after opening the vendor (0xFFA0) interface if
+# no reports arrive within this grace period. The interface may open before
+# the controller is powered on or paired, causing the initial handshake to fail.
+HANDSHAKE_RETRY_GRACE_SECONDS = 3.0
+
+# Periodically verify that the vendor interface (0xFFA0) is still present.
+# Interface disappearance is a more reliable disconnect signal than read()
+# failures with hidapi.
+INTERFACE_PRESENCE_CHECK_SECONDS = 2.0
 
 
 def _send_command(device: "hid.device", command: tuple[int, ...]) -> None:
@@ -285,23 +282,24 @@ class HIDReaderThread(threading.Thread):
             return None
 
     def _read_loop(self, device: "hid.device") -> None:
-        """
-        Block on read() forever, emit events on state changes.
-        Exits when the device disconnects or stop() is called.
-
-        Handshake retry
-        ────────────────
-        See NO_REPORT_TIMEOUT_SECONDS: if the read timeout ticks by with
-        zero reports for that long, treat the controller as not actually
-        connected yet (even though the handle is still open) and resend
-        the handshake, repeating every NO_REPORT_TIMEOUT_SECONDS until
-        real data shows up. This only costs a monotonic() check and an
-        occasional handful of bytes written on top of the 100 ms read
-        timeout we already pay for – no extra thread, no busy loop.
-        """
+    """
+    Block on read() and emit events on state changes.
+    Exits when the device disconnects or stop() is called.
+    
+    Connection / handshake behavior:
+    - _open_device() sends the initial handshake when the vendor interface
+      (0xFFA0) is opened.
+    - If no reports arrive within HANDSHAKE_RETRY_GRACE_SECONDS, the handshake
+      is retried once to handle cases where the interface appeared before the
+      controller was powered on or paired.
+    - The handshake is never repeated continuously while the interface is silent.
+    - Interface presence is checked periodically; disappearance is treated as
+      the disconnect signal. A new connection triggers a fresh open and handshake.
+    """
         now = time.monotonic()
         last_report_time = now
-        last_handshake_time = now  # _open_device() already sent one
+        last_presence_check = now
+        handshake_retried = False
 
         while not self._stop_event.is_set():
             try:
@@ -315,15 +313,23 @@ class HIDReaderThread(threading.Thread):
             now = time.monotonic()
 
             if not report:
-                if now - last_report_time >= NO_REPORT_TIMEOUT_SECONDS:
-                    self._set_connected(False)
-                    if (
-                        self._send_handshake
-                        and now - last_handshake_time >= NO_REPORT_TIMEOUT_SECONDS
-                    ):
-                        for command in INIT_COMMANDS:
-                            _send_command(device, command)
-                        last_handshake_time = now
+                if (
+                    self._send_handshake
+                    and not handshake_retried
+                    and now - last_report_time >= HANDSHAKE_RETRY_GRACE_SECONDS
+                ):
+                    for command in INIT_COMMANDS:
+                        _send_command(device, command)
+                    handshake_retried = True
+
+                if now - last_presence_check >= INTERFACE_PRESENCE_CHECK_SECONDS:
+                    last_presence_check = now
+                    if self._find_vendor_interface_path() is None:
+                        # Interface is actually gone - real disconnect.
+                        # Let the caller close and go back to polling; a
+                        # single fresh handshake will be sent on reopen.
+                        self._set_connected(False)
+                        return
                 continue
 
             # Real data arrived - the physical controller is actually there.

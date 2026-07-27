@@ -86,13 +86,24 @@ _HIT_ZONES_JSON_PATH = _ROOT / "assets" / "hit_zones.json"
 _ICON_PATH = _ROOT / "assets" / "icons" / "config.ico"
 
 
-def _load_svg_derived_zones() -> dict[str, tuple[float, float, float, float]]:
-    """Read the pre-derived button bounding boxes (see tools/generate_hit_zones.py)."""
+def _load_svg_derived_zones() -> dict[str, dict]:
+    """
+    Read the pre-derived button hit zones (see
+    tools/render_controller_assets.py). Each entry is
+    {"bbox": [minx, miny, maxx, maxy], "polygons": [[x,y,...], ...]} -
+    one or more polygons approximating the actual button outline,
+    not just its bounding box.
+    """
     try:
         raw = json.loads(_HIT_ZONES_JSON_PATH.read_text(encoding="utf-8"))
     except (FileNotFoundError, OSError, ValueError):
         return {}
-    return {k: tuple(v) for k, v in raw.items()}
+
+    zones: dict[str, dict] = {}
+    for button, entry in raw.items():
+        if isinstance(entry, dict) and "polygons" in entry:
+            zones[button] = entry
+    return zones
 
 MUTEX_NAME = "VaderRemapperConfig"
 
@@ -189,26 +200,30 @@ HIT_ZONES: dict[str, dict] = {
 
 def _resolve_hit_zones() -> dict[str, dict]:
     """
-    Prefer bounding boxes read straight from controller.svg's own
+    Prefer the polygon outlines read straight from controller.svg's own
     labelled shapes (assets/hit_zones.json); fall back to the manual
     HIT_ZONES table only for buttons the artwork doesn't unambiguously
     provide yet (currently: Home, Arrow, Circle).
+
+    A resolved "poly" zone's "coords" is a list of flat point-lists -
+    one per polygon part, since some buttons (e.g. Start/Select) are
+    drawn as more than one path - so the canvas can draw/hit-test the
+    actual button silhouette instead of a bounding box.
     """
     derived = _load_svg_derived_zones()
     resolved: dict[str, dict] = {}
     for button, manual in HIT_ZONES.items():
-        bbox = derived.get(button)
-        if bbox:
-            min_x, min_y, max_x, max_y = bbox
+        entry = derived.get(button)
+        if entry and entry.get("polygons"):
+            min_x, min_y, max_x, max_y = entry["bbox"]
             resolved[button] = {
-                "shape": "rect",
-                "coords": (min_x, min_y, max_x - min_x, max_y - min_y),
+                "shape": "poly",
+                "coords": entry["polygons"],
                 "label_xy": ((min_x + max_x) / 2, (min_y + max_y) / 2),
             }
         else:
             resolved[button] = manual
     return resolved
-
 
 RESOLVED_HIT_ZONES: dict[str, dict] = _resolve_hit_zones()
 
@@ -420,8 +435,9 @@ class ControllerCanvas(tk.Canvas):
         self._sx = self.CANVAS_W / SVG_W
         self._sy = self.CANVAS_H / SVG_H    # slightly taller crop ratio
 
-        # canvas item ids for each zone
-        self._zone_ids: dict[str, int] = {}
+        # canvas item ids for each zone (a button can be made of more
+        # than one polygon part, e.g. Start/Select)
+        self._zone_ids: dict[str, list[int]] = {}
         # canvas item ids for shortcut labels
         self._label_ids: dict[str, int] = {}
 
@@ -505,6 +521,14 @@ class ControllerCanvas(tk.Canvas):
                     (cx + r) * sx, (cy + r) * sy,
                     fill=C["surface"], outline=C["border"], width=1,
                 )
+            elif shape == "poly":
+                parts = coords if isinstance(coords[0], (list, tuple)) else [coords]
+                for points in parts:
+                    scaled = _scale_coords(points, sx, sy)
+                    self.create_polygon(
+                        scaled,
+                        fill=C["surface"], outline=C["border"], width=1,
+                    )
             else:
                 continue
 
@@ -522,40 +546,58 @@ class ControllerCanvas(tk.Canvas):
                 continue
             self._draw_zone(button, zone)
 
+    # Stipple pattern used to fake partial transparency on the Canvas
+    # (Tkinter has no real alpha compositing for fills). "gray25" is a
+    # 25%-of-pixels dither - sparse enough that the controller artwork
+    # underneath, including the button's printed name, stays legible
+    # through an unmapped zone. Mapped zones drop the stipple entirely
+    # so they read as solid/opaque.
+    _UNMAPPED_STIPPLE = "gray25"
+
     def _draw_zone(self, button: str, zone: dict) -> None:
         sx, sy = self._sx, self._sy
         shape = zone["shape"]
         coords = zone["coords"]
+        mapped = bool(self._mapping.get(button, ""))
+        fill = C["mapped"] if mapped else C["surface"]
+        stipple = "" if mapped else self._UNMAPPED_STIPPLE
 
-        # Draw the clickable shape
+        item_ids: list[int] = []
+
+        # Draw the clickable shape. "poly" may be more than one part
+        # (e.g. Start/Select are each drawn as several paths in the
+        # SVG) - every part shares the same tags so they behave as one
+        # zone for hover/click/highlight purposes.
         if shape == "rect":
             x, y, w, h = coords
             pts = _rect_to_poly(x, y, w, h)
             scaled = _scale_coords(pts, sx, sy)
-            item_id = self.create_polygon(
+            item_ids.append(self.create_polygon(
                 scaled,
-                fill=C["surface"], outline=C["border"], width=1.5,
+                fill=fill, stipple=stipple, outline=C["border"], width=1.5,
                 tags=("zone", f"zone_{button}"),
-            )
+            ))
         elif shape == "circle":
             cx, cy, r = coords
-            item_id = self.create_oval(
+            item_ids.append(self.create_oval(
                 (cx - r) * sx, (cy - r) * sy,
                 (cx + r) * sx, (cy + r) * sy,
-                fill=C["surface"], outline=C["border"], width=1.5,
+                fill=fill, stipple=stipple, outline=C["border"], width=1.5,
                 tags=("zone", f"zone_{button}"),
-            )
+            ))
         elif shape == "poly":
-            scaled = _scale_coords(coords, sx, sy)
-            item_id = self.create_polygon(
-                scaled,
-                fill=C["surface"], outline=C["border"], width=1.5,
-                tags=("zone", f"zone_{button}"),
-            )
+            parts = coords if isinstance(coords[0], (list, tuple)) else [coords]
+            for points in parts:
+                scaled = _scale_coords(points, sx, sy)
+                item_ids.append(self.create_polygon(
+                    scaled,
+                    fill=fill, stipple=stipple, outline=C["border"], width=1.5,
+                    tags=("zone", f"zone_{button}"),
+                ))
         else:
             return
 
-        self._zone_ids[button] = item_id
+        self._zone_ids[button] = item_ids
 
         # Button name label
         lx, ly = zone["label_xy"]
@@ -585,14 +627,21 @@ class ControllerCanvas(tk.Canvas):
     def _on_hover(self, button: str, entering: bool) -> None:
         if button == self._active_button:
             return
-        zone_id = self._zone_ids.get(button)
-        if zone_id is None:
+        zone_ids = self._zone_ids.get(button)
+        if not zone_ids:
             return
         if entering:
-            self.itemconfig(zone_id, fill=C["highlight"], outline=C["accent"])
+            for zone_id in zone_ids:
+                self.itemconfig(zone_id, fill=C["highlight"], stipple="",
+                                 outline=C["accent"])
             self.config(cursor="hand2")
         else:
-            self.itemconfig(zone_id, fill=C["surface"], outline=C["border"])
+            mapped = bool(self._mapping.get(button, ""))
+            fill = C["mapped"] if mapped else C["surface"]
+            stipple = "" if mapped else self._UNMAPPED_STIPPLE
+            for zone_id in zone_ids:
+                self.itemconfig(zone_id, fill=fill, stipple=stipple,
+                                 outline=C["border"])
             self.config(cursor="")
 
     def _on_click(self, button: str) -> None:
@@ -603,22 +652,27 @@ class ControllerCanvas(tk.Canvas):
         """Highlight the active button zone; reset the previous one."""
         # Reset previous
         if self._active_button and self._active_button != button:
-            prev_id = self._zone_ids.get(self._active_button)
-            if prev_id:
-                self.itemconfig(prev_id,
-                                fill=C["surface"], outline=C["border"])
+            prev_mapped = bool(self._mapping.get(self._active_button, ""))
+            prev_fill = C["mapped"] if prev_mapped else C["surface"]
+            prev_stipple = "" if prev_mapped else self._UNMAPPED_STIPPLE
+            for zone_id in self._zone_ids.get(self._active_button, []):
+                self.itemconfig(zone_id, fill=prev_fill, stipple=prev_stipple,
+                                 outline=C["border"])
 
         self._active_button = button
 
         if button is not None:
-            zone_id = self._zone_ids.get(button)
-            if zone_id:
+            for zone_id in self._zone_ids.get(button, []):
                 self.itemconfig(zone_id,
-                                fill=C["accent_press"], outline=C["accent_hover"],
-                                width=2)
+                                fill=C["accent_press"], stipple="",
+                                outline=C["accent_hover"], width=2)
 
     def update_label(self, button: str, shortcut: str) -> None:
-        """Refresh the shortcut text shown inside a zone."""
+        """
+        Refresh the shortcut text shown inside a zone, and flip the
+        zone itself between the dithered "unmapped, see-through" look
+        and the solid "mapped" look to match.
+        """
         label_id = self._label_ids.get(button)
         if label_id is None:
             return
@@ -628,6 +682,13 @@ class ControllerCanvas(tk.Canvas):
             text=f"{button}\n{display}",
             fill=C["mapped"] if shortcut else C["unmapped"],
         )
+
+        if button != self._active_button:
+            mapped = bool(shortcut)
+            fill = C["mapped"] if mapped else C["surface"]
+            stipple = "" if mapped else self._UNMAPPED_STIPPLE
+            for zone_id in self._zone_ids.get(button, []):
+                self.itemconfig(zone_id, fill=fill, stipple=stipple)
 
     def update_mapping(self, mapping: dict[str, str]) -> None:
         self._mapping = mapping

@@ -1,42 +1,38 @@
 name: Build Windows Executables
-
 on:
-  push:
-    tags:
-      - "v*"           # Trigger on version tags: v0.1.0, v1.0.0, etc.
-  workflow_dispatch:   # Allow manual trigger from GitHub UI
-
+  workflow_dispatch:   # Manual trigger only - no push/tag trigger
+    inputs:
+      version:
+        description: "Version number for this build (e.g. 1.2.0)"
+        required: true
+        default: "0.1.0"
 jobs:
   build:
     runs-on: windows-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller hidapi
-
       - name: Build executables
+        env:
+          BUILD_VERSION: ${{ inputs.version }}
         run: python build/build.py
-
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: VaderMapper-windows
+          name: VaderMapper-v${{ inputs.version }}
           path: dist/VaderMapper/
-
       - name: Create release
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: v${{ inputs.version }}
           files: dist/VaderMapper/**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

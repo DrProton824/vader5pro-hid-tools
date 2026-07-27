@@ -12,19 +12,19 @@ The dongle exposes 4 different HID interfaces
 
 # HID Interface Enumeration
 
-The dongle exposes hid interfaces differently depending on startup order.
+The dongle exposes HID interfaces differently depending on startup order.
 
 ## Case A
 
-Sequence:
+Action:
 
-- Dongle unplugged
-- Dongle plugged into the PC
+- Dongle is currently unplugged
+- Dongle gets plugged into the PC
 - Controller remains OFF
 
 Result:
 
-- Four HID interfaces enumerate.
+- Four HID interfaces enumerate after dongle is plugged in.
 - No Traffic/Communication on all 4 HID Interfaces.
 
 ---
@@ -32,7 +32,8 @@ Result:
 ## Case B
 
 Sequence:
-- Dongle already plugged into the PC
+- Dongle is already plugged into the PC
+- Controller is connected via dongle
 - Controller is turned OFF
 
 Result:
@@ -43,21 +44,24 @@ Result:
 
 Controller is turned ON again:
 
-- HID interfaces reappear.
+- All 4 HID interfaces reappear.
 - Traffic/Communication on Interface 0 and 1.
+  - Short initialization burst on Interface 1.
+  - After initialization, heartbeat packet is sent about once every 30 seconds on Interface 1.
 - No Traffic/Communication on Interface 3 and 4.
 
 ---
 
 ## Conclusions
 
-**Interface presence alone is NOT a reliable controller connection detector.**
+**HID Interface presence alone is NOT a reliable controller connection detector.**
 
-The dongle may enumerate while no wireless controller is connected.
+The dongle may enumerate HID interfaces while no controller is connected to the dongle.
+
 
 Reliable observations:
 
-- First communication on Interface 1 indicates the controller has connected.
+- Communication on Interface 1 indicates the controller has connected.
 - Interface disappearance is a reliable disconnect signal.
 
 ---
@@ -75,14 +79,11 @@ When active, the dongle exposes four HID interfaces.
 
 Observed behaviour:
 
-- Reports only when controller input changes.
+- Reports only during controller inputs.
 - Carries standard controller input:
-  - Buttons
-  - Triggers
-  - Analogue sticks
 - No heartbeat.
 - No startup sequence.
-- No vendor-only buttons observed.
+- No vendor-only buttons observed (LM, RM, C, Z, M1-M4).
 - No gyro data observed.
 
 **Likely:** XInput-compatible HID interface (descriptor not yet verified).
@@ -100,14 +101,12 @@ Vendor-specific communication interface.
 
 Observed behaviour:
 
-Before host initialization:
-
+Before handshake initialization:
 - Startup sequence
 - Heartbeat every ~30 seconds
 - No continuous input stream
 
-After vendor initialization:
-
+After handshake initialization:
 - Continuous vendor input reports (`0xEF`)
 - Standard buttons
 - Vendor-only buttons
@@ -124,7 +123,7 @@ After vendor initialization:
 | Usage Page | `0x0001` |
 | Usage | `0x0002` |
 
-Purpose currently unknown.
+Exact purpose currently unknown.
 
 ---
 
@@ -135,18 +134,40 @@ Purpose currently unknown.
 | Usage Page | `0xFFEE` |
 | Usage | `0x0000` |
 
-Purpose currently unknown.
+Exact purpose currently unknown.
 
 ---
+
+# Interface 0 Packet Format
+
+Report length:
+- 14 bytes
+
+Observed characteristics:
+- No packet header.
+- No packet type field.
+- No checksum or CRC observed.
+- Reports are emitted only when controller state changes.
+- No startup sequence.
+- No heartbeat.
+
+
+Example observations:
+
+- Bytes 0–9 appear to contain analogue stick and trigger values.
+- Bytes 10–13 appear to contain button state bits.
+
+The exact report descriptor and field layout have not been decoded.
+
+---
+
 
 # Interface 1 Packet Format
 
 Report length:
-
 - 32 bytes
 
 Header:
-
 | Byte | Meaning |
 |------|---------|
 | 0 | `0x5A` |
@@ -154,7 +175,6 @@ Header:
 | 2 | Command / packet type |
 | 31 | Checksum / CRC |
 
----
 
 # Startup Sequence
 
@@ -199,9 +219,14 @@ Likely packet meanings:
 
 ---
 
-# Vendor Initialization (Handshake)
+# Vendor Initialization (Handshake) via Interface 1
 
-Firmware analysis recovered the following initialization sequence:
+The vendor HID initialization sequence was recovered from the
+reverse-engineered Vader5Protocol implementation in ControlLab:
+
+https://github.com/dracinn/ControlLab
+
+The implementation defines the following initialization commands:
 
 ```
 5A A5 01 02 03
@@ -211,29 +236,49 @@ Firmware analysis recovered the following initialization sequence:
 5A A5 11 07 FF 01 FF FF FF 15
 ```
 
-Observed behaviour before initialization:
+## Behaviour before initialization
 
-- Startup sequence
-- Heartbeat every ~30 seconds
-- No continuous vendor input
+During active controller connection but before initialization, Interface 1 provides:
+- Controller information response
+- Capability/status responses
+- Heartbeat packets approximately every 30 seconds
 
-Observed behaviour after initialization:
+However:
+- No continuous vendor input reports are produced.
+- Standard controller input remains available through Interface 0.
+- Vendor-specific controls and motion data are not reported.
 
-- Continuous `0xEF` input reports
-- Standard controls
-- Vendor-only buttons
-- Gyroscope
+
+## Behaviour after initialization
+
+After sending the initialization sequence, Interface 1 begins
+producing vendor input reports:
+
+- `0xEF` controller state reports
+- Vendor-only buttons:
+  - M1-M4
+  - LM/RM
+  - C/Z
+  - Home(Flydigi Logo)
+- Standard buttons:
+  - X/Y/A/B
+  - Up/Down/Left/Right
+  - Start/Select
+  - FN/Share
+- Gyroscope data
+- Accelerometer data
 - High-rate controller state updates
 
-The following command stops the vendor stream:
+The following command disables the vendor input stream:
 
 ```
 5A A5 11 07 FF 00 FF FF FF 14
 ```
 
-After the stop command, Interface 1 returns to its passive heartbeat-only behaviour.
+After the stop command, Interface 1 returns to its passive
+heartbeat/status behaviour.
 
-The exact purpose of each initialization command is currently unknown.
+The exact purpose of each initialization command was not further investigated.
 
 ---
 
@@ -260,13 +305,14 @@ Heartbeat should **not** be used for disconnect detection because:
 
 # Recommended Monitoring Logic
 
-1. Locate Interface 1.
-2. Open Interface 1.
-3. Wait for the first valid packet.
-4. Mark the controller as connected.
-5. Send the recovered vendor initialization sequence if vendor reports are required.
-6. Read vendor reports continuously.
-7. Detect disconnect through interface disappearance (and read errors where applicable).
+1. Wait for Interface 1 ennumeration.
+2. Locate Interface 1.
+3. Open Interface 1.
+4. Wait for the first valid packet.
+5. Mark the controller as connected.
+6. Send the recovered vendor initialization sequence if vendor reports are required.
+7. Read vendor reports continuously.
+8. Detect disconnect through interface disappearance (and read errors where applicable).
 
 This approach combines:
 

@@ -296,6 +296,8 @@ class TitleBar(tk.Frame):
         super().__init__(parent, bg=C["titlebar"], height=self.HEIGHT, **kwargs)
         self.pack_propagate(False)
         self._app_root = root
+        self._drag_offset_x = 0
+        self._drag_offset_y = 0
 
         left = tk.Frame(self, bg=C["titlebar"])
         left.pack(side="left", fill="y", padx=(14, 0))
@@ -326,7 +328,8 @@ class TitleBar(tk.Frame):
 
         # Dragging: bind on the bar itself and the (non-interactive) labels.
         for widget in (self, left):
-            widget.bind("<ButtonPress-1>", self._start_native_drag)
+            widget.bind("<ButtonPress-1>", self._begin_drag)
+            widget.bind("<B1-Motion>", self._do_drag)
 
     def _make_button(self, parent, symbol: str, hover_bg: str, command) -> tk.Label:
         btn = tk.Label(
@@ -350,24 +353,31 @@ class TitleBar(tk.Frame):
 
     # ── Drag to move ─────────────────────────────────────────────────────────
 
-    def _start_native_drag(self, event: tk.Event) -> None:
+    def _begin_drag(self, event: tk.Event) -> None:
+        """Record the pointer offset from the window's top-left corner."""
+        self._drag_offset_x = event.x_root - self._app_root.winfo_x()
+        self._drag_offset_y = event.y_root - self._app_root.winfo_y()
+
+    def _do_drag(self, event: tk.Event) -> None:
         """
-        Let Windows perform the move itself (WM_SYSCOMMAND/SC_MOVE),
-        exactly like dragging a native title bar - perfectly smooth,
-        because Windows does the whole drag loop without asking Tk to
-        re-layout anything on every mouse-move.
+        Move the window by setting only its position ("+x+y"), never
+        its size.
+
+        We used to hand this off to Windows via WM_SYSCOMMAND/SC_MOVE.
+        That put the OS in charge of the window rect while Tk still
+        believed it owned the geometry (this window's native caption /
+        thick-frame was stripped via raw ctypes in
+        _strip_native_titlebar, but Tk's own cached border metrics from
+        window-creation time were never updated to match). Every
+        WM_MOVE Tk saw during that native drag made it reassert a
+        geometry computed from those stale metrics, so the window grew
+        a little on every mouse-move and drifted off screen. Moving it
+        ourselves - position only, every <B1-Motion> event - keeps Tk
+        from ever touching width/height during a drag.
         """
-        try:
-            hwnd = ctypes.windll.user32.GetParent(self._app_root.winfo_id())
-            ctypes.windll.user32.ReleaseCapture()
-            WM_SYSCOMMAND = 0x0112
-            SC_MOVE = 0xF010
-            HTCAPTION = 2
-            ctypes.windll.user32.SendMessageW(
-                hwnd, WM_SYSCOMMAND, SC_MOVE | HTCAPTION, 0
-            )
-        except Exception:
-            pass
+        x = event.x_root - self._drag_offset_x
+        y = event.y_root - self._drag_offset_y
+        self._app_root.geometry(f"+{x}+{y}")
 
     # ── Buttons ──────────────────────────────────────────────────────────────
 

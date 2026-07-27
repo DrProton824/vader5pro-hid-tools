@@ -232,12 +232,87 @@ Likely packet meanings:
 
 | Type | Purpose |
 |------|---------|
-| `0x01` | Firmware/device information |
-| `0xA1` | Controller capability information |
+| `0x01` | Firmware/device information (contains firmware version fields) |
+| `0xA1` | Capability / device information (exact format unknown) |
 | `0x02` | Status information |
 | `0x04` | Configuration information |
 | `0x10` | Heartbeat |
 | `0x11` | Event/status response |
+
+---
+
+The `0x01` startup packet contains firmware version information for several
+components of the controller.
+
+Each firmware version is stored as **two packed BCD bytes**, where every
+4-bit nibble represents one decimal digit.
+
+For a two-byte firmware field:
+
+```
+AA BB
+```
+
+the version number is decoded as:
+
+```
+(AA >> 4).(AA & 0x0F).(BB >> 4).(BB & 0x0F)
+```
+
+Equivalent nibble layout:
+
+```
+Byte AA                 Byte BB
+
++--------+--------+     +--------+--------+
+| High   | Low    |     | High   | Low    |
+| nibble | nibble |     | nibble | nibble |
++--------+--------+     +--------+--------+
+    V1       V2             V3       V4
+
+Version = V1.V2.V3.V4
+```
+
+Examples:
+
+| Raw bytes | Decoded version |
+|-----------|-----------------|
+| `05 45` | `0.5.4.5` |
+| `71 53` | `7.1.5.3` |
+| `35 15` | `3.5.1.5` |
+| `12 34` | `1.2.3.4` |
+
+For non-segmented `0x01` packets, the observed firmware field layout is:
+
+| Byte(s) | Meaning |
+|---------|---------|
+| 12–13 | Main controller firmware |
+| 14–15 | Dongle firmware |
+| 16–17 | SI firmware |
+| 18–19 | Unknown |
+| 24–25 | RF firmware |
+
+Example:
+
+```
+5A A5 01 01 00 82 02 00 00 00 00 05 45 01 00 71 53 04 67 35 15 00 00 00 00 00 00 10 26 1F 00 34
+```
+
+Decoded values:
+
+| Component | Raw bytes | Version |
+|-----------|-----------|---------|
+| Main | `05 45` | `0.5.4.5` |
+| Dongle | `01 00` | `0.1.0.0` |
+| SI | `71 53` | `7.1.5.3` |
+| RF | `35 15` | `3.5.1.5` |
+
+The purpose of bytes `18–19` (`04 67` in the example above) is currently unknown.
+
+The reverse-engineered parser also supports segmented `0x01` packets
+(payload length > 1). In those packets the firmware fields are shifted by
+one byte due to the additional segment index byte. Only segment `0` is
+interpreted by the parser.
 
 ---
 

@@ -1,240 +1,277 @@
-============================================================
-VID 37D7 PID 2401 - HID Controller Reverse Engineering Notes
-============================================================
+# VID 37D7 PID 2401 | HID Reverse Engineering Notes
 
-Device:
-- USB wireless receiver dongle
-- VID: 0x37D7
-- PID: 0x2401
+## Device
 
+- Flydigi Flysync™ Vader 5 Pro (USB dongle)
+- **VID:** `0x37D7`
+- **PID:** `0x2401`
 
-The dongle can expose or remove its HID interfaces depending
-on the wireless controller connection state. 
-There are TWO separate states:
+The dongle exposes 4 different HID interfaces
 
-1. USB dongle connected to PC
-2. Wireless controller connected to dongle
+---
 
-------------------------------------------------------------
-HID INTERFACE ENUMERATION
-------------------------------------------------------------
+# HID Interface Enumeration
 
-The dongle can behave in different states depending on startup
-order:
+The dongle exposes hid interfaces differently depending on startup order.
 
-CASE A
+## Case A
+
 Sequence:
+
 - Dongle unplugged
-- Plug dongle in
-- Controller OFF
+- Dongle plugged into the PC
+- Controller remains OFF
+
 Result:
-- 4 HID interfaces may appear immediately
-However:
-- Interfaces are silent
-- No controller communication is present
 
+- Four HID interfaces enumerate.
+- No Traffic/Communication on all 4 HID Interfaces.
 
-CASE B
+---
+
+## Case B
+
 Sequence:
-- Controller OFF
-- Start monitoring
+- Dongle already plugged into the PC
+- Controller is turned OFF
+
 Result:
-- No HID interfaces
-Controller ON:
-- 4 HID interfaces appear
-- Interface 1 starts communication
 
-CASE C
-Sequence:
-- Controller connected
-- Turn controller OFF
-Result:
-- After approximately 3-5 seconds:
-    - Windows USB disconnect sound
-    - 4 HID interfaces disappear
-Turning controller ON again:
-- HID interfaces reappear
-- Interface 1 immediately sends startup sequence
+- After approximately **3–5 seconds**:
+  - Windows plays the USB disconnect sound.
+  - All four HID interfaces disappear.
 
+Controller is turned ON again:
 
-Conclusion:
-HID interface presence alone is NOT a reliable controller
-connection detector.
-The reliable detector is communication activity on Interface 1.
+- HID interfaces reappear.
+- Traffic/Communication on Interface 0 and 1.
+- No Traffic/Communication on Interface 3 and 4.
 
+---
 
-------------------------------------------------------------
-HID INTERFACE LIST
-------------------------------------------------------------
+## Conclusions
 
-When active, the dongle exposes:
+**Interface presence alone is NOT a reliable controller connection detector.**
 
-Interface 0:
- Usage Page: 0x0001
- Usage:      0x0005
+The dongle may enumerate while no wireless controller is connected.
 
-Interface 1:
- Usage Page: 0xFFA0
- Usage:      0x0001
+Reliable observations:
 
-Interface 2:
- Usage Page: 0x0001
- Usage:      0x0002
+- First communication on Interface 1 indicates the controller has connected.
+- Interface disappearance is a reliable disconnect signal.
 
-Interface 3:
- Usage Page: 0xFFEE
- Usage:      0x0000
+---
 
+# HID Interface List
 
-------------------------------------------------------------
-INTERFACE 1
-------------------------------------------------------------
+When active, the dongle exposes four HID interfaces.
 
-Main communication interface:
+## Interface 0
 
-Interface:
-- Number: 1
-- Usage Page: 0xFFA0
-- Usage: 0x0001
+| Property | Value |
+|----------|-------|
+| Usage Page | `0x0001` |
+| Usage | `0x0005` |
 
+Observed behaviour:
 
-Detection logic:
+- Reports only when controller input changes.
+- Carries standard controller input:
+  - Buttons
+  - Triggers
+  - Analogue sticks
+- No heartbeat.
+- No startup sequence.
+- No vendor-only buttons observed.
+- No gyro data observed.
 
-1. Find Interface 1.
-2. Open it.
-3. Read reports.
+**Likely:** XInput-compatible HID interface (descriptor not yet verified).
 
-Controller connected:
-- Interface 1 produces data.
+---
 
-Controller disconnected:
-- No Interface 1 traffic.
-- Eventually HID interfaces may disappear.
+## Interface 1
 
+| Property | Value |
+|----------|-------|
+| Usage Page | `0xFFA0` |
+| Usage | `0x0001` |
 
-Do NOT use:
-- Interface existence alone
-- Heartbeat timeout alone
+Vendor-specific communication interface.
 
-as the primary connection detector.
+Observed behaviour:
 
+Before host initialization:
 
-------------------------------------------------------------
-INTERFACE 1 PACKET FORMAT
-------------------------------------------------------------
+- Startup sequence
+- Heartbeat every ~30 seconds
+- No continuous input stream
 
-Reports:
+After vendor initialization:
 
-Length:
+- Continuous vendor input reports (`0xEF`)
+- Standard buttons
+- Vendor-only buttons
+- Analogue sticks
+- Gyroscope
+- Additional vendor state
+
+---
+
+## Interface 2
+
+| Property | Value |
+|----------|-------|
+| Usage Page | `0x0001` |
+| Usage | `0x0002` |
+
+Purpose currently unknown.
+
+---
+
+## Interface 3
+
+| Property | Value |
+|----------|-------|
+| Usage Page | `0xFFEE` |
+| Usage | `0x0000` |
+
+Purpose currently unknown.
+
+---
+
+# Interface 1 Packet Format
+
+Report length:
+
 - 32 bytes
 
 Header:
 
-Byte 0:
-    0x5A
+| Byte | Meaning |
+|------|---------|
+| 0 | `0x5A` |
+| 1 | `0xA5` |
+| 2 | Command / packet type |
+| 31 | Checksum / CRC |
 
-Byte 1:
-    0xA5
+---
 
+# Startup Sequence
 
-Byte 2:
-    Command / packet type
+Whenever the wireless controller connects, Interface 1 immediately emits an initialization burst **without any host interaction**.
 
+Typical sequence:
 
-Last byte:
-    Checksum / CRC
-
-
-------------------------------------------------------------
-STARTUP SEQUENCE
-------------------------------------------------------------
-
-When controller communication starts,
-Interface 1 sends an initialization burst:
-
+```
 5A A5 01 ...
 5A A5 A1 ...
 5A A5 02 ...
 5A A5 04 ...
 5A A5 10 ...
 5A A5 11 ...
-
+```
 
 Example:
 
+```
 5A A5 01 01 00 82 02 ...
 5A A5 A1 01 00 02 41 ...
 5A A5 02 01 00 FF FF ...
 5A A5 04 01 00 14 20 ...
 5A A5 10 01 00 01 ...
 5A A5 11 01 00 01 ...
+```
 
+The exact ordering may vary slightly.
 
-Likely meaning:
+After this burst, Interface 1 becomes mostly idle and only emits heartbeat packets until initialized by the host.
 
-0x01:
-- Device/controller information
+Likely packet meanings:
 
-0xA1:
-- Controller state/capabilities
+| Type | Purpose |
+|------|---------|
+| `0x01` | Device / controller information |
+| `0xA1` | Controller capabilities |
+| `0x02` | Status information |
+| `0x04` | Configuration information |
+| `0x10` | Heartbeat |
+| `0x11` | Status / event response |
 
-0x02:
-- Status information
+---
 
-0x04:
-- Configuration information
+# Vendor Initialization (Handshake)
 
-0x10:
-- Heartbeat
+Firmware analysis recovered the following initialization sequence:
 
-0x11:
-- Status/event response
+```
+5A A5 01 02 03
+5A A5 A1 02 A3
+5A A5 02 02 04
+5A A5 04 02 06
+5A A5 11 07 FF 01 FF FF FF 15
+```
 
+Observed behaviour before initialization:
 
-------------------------------------------------------------
-HEARTBEAT
-------------------------------------------------------------
+- Startup sequence
+- Heartbeat every ~30 seconds
+- No continuous vendor input
+
+Observed behaviour after initialization:
+
+- Continuous `0xEF` input reports
+- Standard controls
+- Vendor-only buttons
+- Gyroscope
+- High-rate controller state updates
+
+The following command stops the vendor stream:
+
+```
+5A A5 11 07 FF 00 FF FF FF 14
+```
+
+After the stop command, Interface 1 returns to its passive heartbeat-only behaviour.
+
+The exact purpose of each initialization command is currently unknown.
+
+---
+
+# Heartbeat
 
 Packet:
 
+```
 5A A5 10 01 00 01 00 00 00 01 00 00 00 00 00 00
 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 13
-
+```
 
 Frequency:
-- Approximately every 30 seconds
 
+- Approximately every **30 seconds**
 
-Important:
-Heartbeat is NOT suitable for disconnect detection.
+Heartbeat should **not** be used for disconnect detection because:
 
-Reason:
-- Timeout would be very slow.
-- Controller disconnect is visible earlier through
-  Interface 1 communication stopping and/or HID removal.
+- The interval is too long.
+- Interface disappearance occurs much sooner.
+- Loss of communication is observable before heartbeat timeout.
 
+---
 
-------------------------------------------------------------
-CURRENT MONITORING APPROACH
-------------------------------------------------------------
-
-Recommended logic:
+# Recommended Monitoring Logic
 
 1. Locate Interface 1.
+2. Open Interface 1.
+3. Wait for the first valid packet.
+4. Mark the controller as connected.
+5. Send the recovered vendor initialization sequence if vendor reports are required.
+6. Read vendor reports continuously.
+7. Detect disconnect through interface disappearance (and read errors where applicable).
 
-2. Continuously read Interface 1.
+This approach combines:
 
-3. First valid packet:
-       CONTROLLER CONNECTED
-
-4. While packets continue:
-       Controller remains connected
-
-5. When Interface 1 stops producing communication:
-       Controller disconnected
-
-
-The current script combines:
 - HID enumeration
-- Interface 1 reading
+- Passive connection detection
+- Optional vendor initialization
+- Continuous vendor report reading
 - Immediate disconnect detection

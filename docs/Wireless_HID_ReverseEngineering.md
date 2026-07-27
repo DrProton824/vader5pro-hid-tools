@@ -45,10 +45,14 @@ Result:
 Controller is turned ON again:
 
 - All 4 HID interfaces reappear.
-- Traffic/Communication on Interface 0 and 1.
-  - Short initialization burst on Interface 1.
-  - After initialization, heartbeat packet is sent about once every 30 seconds on Interface 1.
-- No Traffic/Communication on Interface 3 and 4.
+- Traffic/Communication:
+  - Interface 1:
+      Emits a controller startup information sequence automatically.
+      Remains mostly idle afterwards.
+      Sends heartbeat packets approximately every 30 seconds.
+  - Interface 0:
+      Begins reporting standard controller input when input changes.
+- No Traffic/Communication observed on Interface 2 and Interface 3.
 
 ---
 
@@ -63,6 +67,7 @@ Reliable observations:
 
 - Communication on Interface 1 indicates the controller has connected.
 - Interface disappearance is a reliable disconnect signal.
+
 
 ---
 
@@ -79,14 +84,27 @@ When active, the dongle exposes four HID interfaces.
 
 Observed behaviour:
 
-- Reports only during controller inputs.
+Observed behaviour:
+
+- Standard HID gamepad input interface.
+- Does not require vendor initialization.
+- Does not expose vendor-specific controls or motion sensors.
+- Reports only when controller state changes.
 - Carries standard controller input:
+  - Buttons
+  - D-pad
+  - Analogue sticks
+  - Triggers
+
+Not observed:
+
 - No heartbeat.
 - No startup sequence.
-- No vendor-only buttons observed (LM, RM, C, Z, M1-M4).
-- No gyro data observed.
+- No vendor-only buttons (LM, RM, C, Z, M1-M4).
+- No gyro data.
+- No accelerometer data.
 
-**Likely:** XInput-compatible HID interface (descriptor not yet verified).
+**Likely:** Standard HID/XInput-compatible interface (descriptor not yet fully verified).
 
 ---
 
@@ -97,16 +115,18 @@ Observed behaviour:
 | Usage Page | `0xFFA0` |
 | Usage | `0x0001` |
 
-Vendor-specific communication interface.
+Vendor-specific NewXInput communication interface.
+Requires the vendor initialization command sequence for full communication
+including vendor input reports and extended controller data.
 
 Observed behaviour:
 
-Before handshake initialization:
+Before vendor initialization:
 - Startup sequence
 - Heartbeat every ~30 seconds
 - No continuous input stream
 
-After handshake initialization:
+After vendor initialization:
 - Continuous vendor input reports (`0xEF`)
 - Standard buttons
 - Vendor-only buttons
@@ -167,13 +187,15 @@ The exact report descriptor and field layout have not been decoded.
 Report length:
 - 32 bytes
 
-Header:
 | Byte | Meaning |
 |------|---------|
-| 0 | `0x5A` |
-| 1 | `0xA5` |
-| 2 | Command / packet type |
-| 31 | Checksum / CRC |
+| 0 | Packet magic `0x5A` |
+| 1 | Packet magic `0xA5` |
+| 2 | Command / report type |
+| 3 | Payload length |
+| 4+ | Payload data |
+| Last used byte | 8-bit additive checksum |
+| Remaining bytes | Zero padding |
 
 
 # Startup Sequence
@@ -204,18 +226,18 @@ Example:
 
 The exact ordering may vary slightly.
 
-After this burst, Interface 1 becomes mostly idle and only emits heartbeat packets until initialized by the host.
+After this burst, Interface 1 becomes mostly idle and only emits heartbeat/status packets until the host enables the vendor input stream.
 
 Likely packet meanings:
 
 | Type | Purpose |
 |------|---------|
-| `0x01` | Device / controller information |
-| `0xA1` | Controller capabilities |
+| `0x01` | Firmware/device information |
+| `0xA1` | Controller capability information |
 | `0x02` | Status information |
 | `0x04` | Configuration information |
 | `0x10` | Heartbeat |
-| `0x11` | Status / event response |
+| `0x11` | Event/status response |
 
 ---
 
@@ -227,6 +249,8 @@ reverse-engineered Vader5Protocol implementation in ControlLab:
 https://github.com/dracinn/ControlLab
 
 The implementation defines the following initialization commands:
+Source:
+`Sources/Vader5Core/Vader5Protocol.swift`
 
 ```
 5A A5 01 02 03
@@ -255,6 +279,12 @@ After sending the initialization sequence, Interface 1 begins
 producing vendor input reports:
 
 - `0xEF` controller state reports
+- Report format:
+- 29+ byte reports
+- Header:
+    - Byte 0: `0x5A`
+    - Byte 1: `0xA5`
+    - Byte 2: `0xEF`
 - Vendor-only buttons:
   - M1-M4
   - LM/RM

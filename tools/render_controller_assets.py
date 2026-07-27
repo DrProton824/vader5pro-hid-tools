@@ -1,20 +1,15 @@
 """
-Generate controller assets from an SVG.
+Generates controller UI assets from a labelled SVG layout.
 
 Creates:
-    - controller.png
-    - hit_zones.json
+    - controller.png   Rendered controller image
+    - hit_zones.json   Button bounding boxes for UI interaction
 
-Supports:
-    - Drag and drop an .svg file onto this script
-    - Command line usage:
+Development tool only:
+    Requires cairosvg and svgelements.
+    Generated assets can be used without these dependencies at runtime.
 
-        python render_controller_assets.py path/to/controller.svg
-
-Requirements (development machine only):
-    pip install cairosvg svgelements
-
-The generated files require no cairosvg/svgelements at runtime.
+Supports drag-and-drop SVG input or command line usage.
 """
 
 from __future__ import annotations

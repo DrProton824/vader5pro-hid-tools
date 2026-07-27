@@ -1,3 +1,10 @@
+# Work-in-progress Vader 5 Pro IMU decoder and 3D orientation visualiser.
+# Uses hidapitester.exe to capture raw HID reports from the vendor HID channel
+# (VID 0x37D7 / PID 0x2401, Usage Page 0xFFA0).
+# Current gyro/accelerometer decoding is experimental: byte locations are known,
+# but scaling, axis alignment, and final rotation calculations are not verified.
+
+
 import subprocess
 import re
 import time

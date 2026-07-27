@@ -1,42 +1,18 @@
 """
-test_handshake.py — one-off diagnostic for the vendor init/stop handshake.
+hid_handshake_test.py — Vader 5 Pro vendor HID handshake experiment.
 
-Purpose
-───────
-We currently open the Vader 5 Pro's vendor HID interface (usage page 0xFFA0)
-and just start reading — no handshake is sent. Third-party clean-room
-reverse-engineering of the same interface (a macOS project called
-ControlLab, unrelated to us) documents a 5-command init sequence and a
-matching stop command, sent as *output* reports, before that project starts
-decoding "0xEF"-prefixed live-input reports. We don't know whether Windows'
-hidapi backend needs this too, or whether our existing "just read" approach
-already gets everything.
+Tests the vendor HID interface of the FLYDIGI Vader 5 Pro wireless dongle
+(VID 0x37D7, PID 0x2401, Usage Page 0xFFA0) to determine whether the
+recovered init handshake is required before normal controller input reports
+are available.
 
-This script does NOT modify src/shared/hid_reader.py. It's a throwaway tool:
-run it, watch the output, and only port SEND_VENDOR_HANDSHAKE = True into
-the real service if this script shows a clear difference.
+Runs a baseline capture, sends the init sequence, captures again, and
+compares received report types. Experimental reverse-engineering tool only;
+does not modify the main HID reader implementation.
 
-What it does
-────────────
-  1. Opens the vendor interface exactly like hid_reader.py does.
-  2. PHASE A (baseline): reads raw reports for a few seconds with no
-     handshake sent, logging the report-type byte (offset 2) it sees.
-  3. Sends the 5 init commands as output reports, logging success/failure
-     of each write.
-  4. PHASE B (after handshake): reads raw reports for longer, decoding
-     M1-M4/LM/RM/C/Z/Home/Arrow button presses so you can physically test
-     buttons and see whether they show up.
-  5. On exit, sends the stop command.
-  6. Prints a summary comparing phase A vs phase B.
-
-Usage
-─────
+Usage:
     pip install hid
-    python test_handshake.py
-
-Press Ctrl+C to end phase B early and see the summary. During phase B,
-press a few buttons (M1, LM, Home, etc.) so you can confirm decoding
-actually reflects real presses, not just that reports are arriving.
+    python hid_handshake_test.py
 """
 
 from __future__ import annotations

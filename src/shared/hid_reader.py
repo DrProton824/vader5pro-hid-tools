@@ -55,19 +55,20 @@ from .constants import (
     VENDOR_ID,
 )
 
-# Enable vendor handshake commands for improved reliability on reconnects.
-# Tested path works without this on Windows/hidapi; enable for cold-plug
-# and resume-from-sleep scenarios.
+# Interface presence != controller connected (the dongle alone enumerates
+# all 4 interfaces with no controller paired). The only reliable connect
+# signal is real traffic on Interface 1.
 DEFAULT_SEND_VENDOR_HANDSHAKE = True
 
-# Retry the handshake once after opening the vendor (0xFFA0) interface if
-# no reports arrive within this grace period. The interface may open before
-# the controller is powered on or paired, causing the initial handshake to fail.
-HANDSHAKE_RETRY_GRACE_SECONDS = 3.0
+# After sending the handshake, how long to watch for a real high-rate
+# input stream (buttons/sticks/gyro) before concluding it didn't take.
+# The startup burst + 30s heartbeat alone won't cross HANDSHAKE_ACTIVE_THRESHOLD
+# reports in this window; live polling will.
+HANDSHAKE_VERIFY_SECONDS = 2.0
+HANDSHAKE_ACTIVE_THRESHOLD = 10
 
-# Periodically verify that the vendor interface (0xFFA0) is still present.
-# Interface disappearance is a more reliable disconnect signal than read()
-# failures with hidapi.
+# How often to re-confirm the vendor interface is still enumerated.
+# Interface disappearance is the disconnect signal, not read silence.
 INTERFACE_PRESENCE_CHECK_SECONDS = 2.0
 
 
@@ -274,76 +275,76 @@ class HIDReaderThread(threading.Thread):
             # Non-blocking mode is NOT used: blocking read() is more efficient
             # because the OS wakes us only when data arrives.
             device.set_nonblocking(False)
-            if self._send_handshake:
-                for command in INIT_COMMANDS:
-                    _send_command(device, command)
             return device
         except OSError:
             return None
 
     def _read_loop(self, device: "hid.device") -> None:
-    """
-    Block on read() and emit events on state changes.
-    Exits when the device disconnects or stop() is called.
-    
-    Connection / handshake behavior:
-    - _open_device() sends the initial handshake when the vendor interface
-      (0xFFA0) is opened.
-    - If no reports arrive within HANDSHAKE_RETRY_GRACE_SECONDS, the handshake
-      is retried once to handle cases where the interface appeared before the
-      controller was powered on or paired.
-    - The handshake is never repeated continuously while the interface is silent.
-    - Interface presence is checked periodically; disappearance is treated as
-      the disconnect signal. A new connection triggers a fresh open and handshake.
-    """
-        now = time.monotonic()
-        last_report_time = now
-        last_presence_check = now
+        """
+        Read passively until real Interface 1 traffic confirms the
+        controller is connected, then send the handshake once. Verify it
+        actually produced a live input stream (not just heartbeat) and
+        resend at most once if it didn't. Disconnect = interface
+        disappearing, never read silence.
+        """
+        last_presence_check = time.monotonic()
+        handshake_sent = False
         handshake_retried = False
+        verify_window_start: Optional[float] = None
+        verify_count = 0
 
         while not self._stop_event.is_set():
             try:
-                # read() blocks until a report arrives or the device disconnects.
-                # Timeout of 100 ms lets us check _stop_event periodically.
                 report = device.read(REPORT_LENGTH, timeout_ms=100)
             except OSError:
-                # Device disconnected mid-session.
-                break
+                break  # device disconnected mid-session
 
             now = time.monotonic()
 
-            if not report:
-                if (
-                    self._send_handshake
-                    and not handshake_retried
-                    and now - last_report_time >= HANDSHAKE_RETRY_GRACE_SECONDS
-                ):
+            if report:
+                self._set_connected(True)
+
+                if not handshake_sent:
+                    if self._send_handshake:
+                        for command in INIT_COMMANDS:
+                            _send_command(device, command)
+                        verify_window_start = now
+                        verify_count = 0
+                    handshake_sent = True
+                elif verify_window_start is not None:
+                    verify_count += 1
+                    if verify_count >= HANDSHAKE_ACTIVE_THRESHOLD:
+                        verify_window_start = None  # confirmed active
+
+                report_bytes = bytes(report)
+                try:
+                    current = decode_report(report_bytes)
+                except Exception:
+                    continue
+                if current is None:
+                    continue  # status/heartbeat report, not button data
+                self._emit_deltas(current)
+                continue
+
+            # No data this read.
+            if (
+                verify_window_start is not None
+                and now - verify_window_start >= HANDSHAKE_VERIFY_SECONDS
+            ):
+                if not handshake_retried:
                     for command in INIT_COMMANDS:
                         _send_command(device, command)
                     handshake_retried = True
+                    verify_window_start = now
+                    verify_count = 0
+                else:
+                    verify_window_start = None  # give up, stop tracking
 
-                if now - last_presence_check >= INTERFACE_PRESENCE_CHECK_SECONDS:
-                    last_presence_check = now
-                    if self._find_vendor_interface_path() is None:
-                        # Interface is actually gone - real disconnect.
-                        # Let the caller close and go back to polling; a
-                        # single fresh handshake will be sent on reopen.
-                        self._set_connected(False)
-                        return
-                continue
-
-            # Real data arrived - the physical controller is actually there.
-            last_report_time = now
-            self._set_connected(True)
-
-            report_bytes = bytes(report)
-            try:
-                current = decode_report(report_bytes)
-            except Exception:
-                continue
-            if current is None:
-                continue  # heartbeat/status/LED-response report, not button data
-            self._emit_deltas(current)
+            if now - last_presence_check >= INTERFACE_PRESENCE_CHECK_SECONDS:
+                last_presence_check = now
+                if self._find_vendor_interface_path() is None:
+                    self._set_connected(False)
+                    return
 
     def _emit_deltas(self, current: frozenset[str]) -> None:
         """

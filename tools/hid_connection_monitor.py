@@ -1,3 +1,9 @@
+# Monitors the FLYDIGI Vader 5 Pro wireless controller connection through
+# the VID 0x37D7 / PID 0x2401 receiver and Interface 1 (Usage Page 0xFFA0).
+# Detects controller connection/disconnection by monitoring HID communication
+# and prints all received Interface 1 reports in hexadecimal format.
+
+
 import hid
 import time
 

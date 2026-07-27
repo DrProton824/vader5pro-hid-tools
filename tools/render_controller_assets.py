@@ -19,7 +19,7 @@ import pathlib
 import sys
 
 import cairosvg          # dev-time only
-from svgelements import SVG, Shape  # dev-time only
+from svgelements import SVG, Shape, Path  # dev-time only
 
 
 # Must match ControllerCanvas.CANVAS_W / CANVAS_H
@@ -80,13 +80,49 @@ def render_png(svg_path: pathlib.Path, png_path: pathlib.Path) -> None:
 
     print(f"Wrote {png_path} ({CANVAS_W}x{CANVAS_H})")
 
+# Number of points used to approximate a shape's outline as a polygon.
+# High enough that curved/chamfered button outlines look like their
+# real silhouette rather than a coarse blob; low enough to stay cheap.
+POLYGON_SAMPLES = 48
+
+
+def _shape_to_polygon(element: Shape) -> list[float] | None:
+    """
+    Approximate a shape's outline as a flat [x0, y0, x1, y1, ...]
+    polygon by sampling it as a Path at evenly spaced t values.
+
+    Replaces the old bbox approach: this artwork uses fillet/chamfer/
+    perspective-envelope path effects, so a shape's bbox can be
+    noticeably bigger than the shape itself. Sampling the actual
+    outline gives a hit zone that matches what's on the PNG.
+    """
+    try:
+        path = Path(element)
+        length = path.length(error=1e-2)
+    except Exception:
+        return None
+
+    if not length:
+        return None
+
+    points: list[float] = []
+    for i in range(POLYGON_SAMPLES):
+        t = i / POLYGON_SAMPLES
+        try:
+            pt = path.point(t)
+        except Exception:
+            continue
+        points.extend([pt.x, pt.y])
+
+    return points if len(points) >= 6 else None  # need >= 3 vertices
 
 def generate_hit_zones(svg_path: pathlib.Path, json_path: pathlib.Path) -> None:
     print("Generating hit zones...")
 
     svg = SVG.parse(str(svg_path))
 
-    zones: dict[str, list[float]] = {}
+    # button -> {"bbox": [minx,miny,maxx,maxy], "polygons": [[x,y,...], ...]}
+    zones: dict[str, dict] = {}
 
     for element in svg.elements():
 
@@ -120,21 +156,30 @@ def generate_hit_zones(svg_path: pathlib.Path, json_path: pathlib.Path) -> None:
             continue
 
         min_x, min_y, max_x, max_y = bbox
+        polygon = _shape_to_polygon(element)
 
-        if button in zones:
-            old = zones[button]
+        entry = zones.setdefault(button, {"bbox": None, "polygons": []})
 
-            min_x = min(min_x, old[0])
-            min_y = min(min_y, old[1])
-            max_x = max(max_x, old[2])
-            max_y = max(max_y, old[3])
+        if entry["bbox"] is None:
+            entry["bbox"] = [min_x, min_y, max_x, max_y]
+        else:
+            old = entry["bbox"]
+            entry["bbox"] = [
+                min(min_x, old[0]),
+                min(min_y, old[1]),
+                max(max_x, old[2]),
+                max(max_y, old[3]),
+            ]
 
-        zones[button] = [
-            min_x,
-            min_y,
-            max_x,
-            max_y,
-        ]
+        if polygon:
+            entry["polygons"].append(polygon)
+        else:
+            # Fall back to a rectangle for this part rather than
+            # dropping it silently.
+            entry["polygons"].append([
+                min_x, min_y, max_x, min_y,
+                max_x, max_y, min_x, max_y,
+            ])
 
     missing = (
         set(SVG_LABEL_TO_BUTTON.values()) | {"C"}
@@ -152,7 +197,8 @@ def generate_hit_zones(svg_path: pathlib.Path, json_path: pathlib.Path) -> None:
     )
 
     print(
-        f"Wrote {json_path} ({len(zones)} buttons)"
+        f"Wrote {json_path} ({len(zones)} buttons, "
+        f"{sum(len(v['polygons']) for v in zones.values())} polygon parts)"
     )
 
 

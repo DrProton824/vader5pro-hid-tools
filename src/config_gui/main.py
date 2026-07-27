@@ -71,6 +71,7 @@ sys.path.insert(0, str(_ROOT))
 from src.shared import config as cfg
 from src.shared import single_instance
 from src.shared.constants import MAPPABLE_BUTTONS
+from src.shared.version import VERSION
 
 # ── Optional SVG rendering ────────────────────────────────────────────────────
 try:
@@ -834,7 +835,7 @@ class VaderConfigApp:
         content.pack(fill="both", expand=True, padx=1, pady=1)
 
         # ── Custom title bar ─────────────────────────────────────────────────
-        TitleBar(content, root, "Vader Remapper", "v1.1").pack(fill="x")
+        TitleBar(content, root, "Vader Remapper", f"v{VERSION}").pack(fill="x")
 
         # ── Controller canvas ─────────────────────────────────────────────────
         self._canvas = ControllerCanvas(

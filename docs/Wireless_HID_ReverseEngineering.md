@@ -241,6 +241,8 @@ Likely packet meanings:
 
 ---
 
+## Packet `0x01` – Firmware Information
+
 The `0x01` startup packet contains firmware version information for several
 components of the controller.
 
@@ -282,7 +284,8 @@ Examples:
 | `35 15` | `3.5.1.5` |
 | `12 34` | `1.2.3.4` |
 
-For non-segmented `0x01` packets, the observed firmware field layout is:
+Byte indices below are **zero-based** and refer to the complete 32-byte HID report.
+For single-segment (Payload length = 1) 0x01 packets, the decoded firmware field layout is:
 
 | Byte(s) | Meaning |
 |---------|---------|
@@ -294,8 +297,20 @@ For non-segmented `0x01` packets, the observed firmware field layout is:
 
 Example:
 
+Example:
+
 ```
-5A A5 01 01 00 82 02 00 00 00 00 05 45 01 00 71 53 04 67 35 15 00 00 00 00 00 00 10 26 1F 00 34
+5A A5 01 01 00
+82 02 00 00 00 00
+05 45
+01 00
+71 53
+04 67
+35 15
+00 00 00 00 00 00
+10 26
+1F 00
+34
 ```
 
 Decoded values:
@@ -306,6 +321,9 @@ Decoded values:
 | Dongle | `01 00` | `0.1.0.0` |
 | SI | `71 53` | `7.1.5.3` |
 | RF | `35 15` | `3.5.1.5` |
+
+A firmware field containing `00 00` or `FF FF` should be considered absent
+or invalid rather than version `0.0.0.0`.
 
 The purpose of bytes `18–19` (`04 67` in the example above) is currently unknown.
 
@@ -410,7 +428,7 @@ Heartbeat should **not** be used for disconnect detection because:
 
 # Recommended Monitoring Logic
 
-1. Wait for Interface 1 ennumeration.
+1. Wait for Interface 1 enumeration.
 2. Locate Interface 1.
 3. Open Interface 1.
 4. Wait for the first valid packet.

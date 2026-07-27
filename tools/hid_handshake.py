@@ -1,3 +1,11 @@
+"""
+Vader 5 Pro vendor HID handshake trigger.
+
+Waits for the vendor HID interface, sends the recovered initialization
+sequence on user confirmation, then sends the stop command and exits.
+"""
+
+
 import hid
 import time
 

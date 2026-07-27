@@ -249,7 +249,10 @@ class HIDReaderThread(threading.Thread):
             return None
 
         for info in candidates:
-            if info.get("usage_page") == USAGE_PAGE:
+            if (
+                info.get("interface_number") == 1
+                and info.get("usage_page") == USAGE_PAGE
+            ):
                 return info.get("path")
 
         # Fall back to the first interface rather than refusing to open
@@ -272,9 +275,7 @@ class HIDReaderThread(threading.Thread):
         try:
             device = hid.device()
             device.open_path(path)
-            # Non-blocking mode is NOT used: blocking read() is more efficient
-            # because the OS wakes us only when data arrives.
-            device.set_nonblocking(False)
+            device.set_nonblocking(True)
             return device
         except OSError:
             return None

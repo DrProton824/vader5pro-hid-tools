@@ -1,0 +1,524 @@
+"""
+Raw Input based HID reader thread -- replaces the hidapi polling reader.
+
+Why Windows Raw Input instead of hidapi?
+─────────────────────────────────────────
+hidapi's blocking device.read() opens a read handle to the vendor
+interface and competes with any other process doing the same (notably
+the Flydigi SpaceStation software) for whatever gets delivered next.
+In practice this showed up as the two readers racing for packets --
+sometimes each only sees every other report, sometimes one starves
+the other entirely.
+
+Windows Raw Input (RegisterRawInputDevices / WM_INPUT) is not a
+read-and-consume model: every process that registers for a usage
+page/usage combination gets its own copy of each report, broadcast by
+the OS. Reading here can never starve the Flydigi software (or vice
+versa), and there's no blocking read call to service -- the thread
+just pumps a standard Win32 message loop, which is asleep (zero CPU)
+until Windows actually has something to deliver. That's both the fix
+for the read race and, incidentally, a lower-power design than a
+polling loop with a timeout.
+
+Writing (the vendor init/stop handshake) is unaffected by any of this
+-- Raw Input is read-only, so the handshake is still sent with a very
+short-lived hidapi write-only open/write/close, exactly like before.
+Short, infrequent (once per connect, once at shutdown) writes don't
+exhibit the same starvation problem reads did.
+
+Connection model
+─────────────────
+- The vendor interface (VID/PID, usage page 0xFFA0, usage 1) is
+  present in Windows' device list as long as the USB dongle is
+  plugged in -- regardless of whether the controller itself is
+  powered on. So interface arrival/removal (WM_INPUT_DEVICE_CHANGE)
+  tracks the *dongle*, not the controller.
+- The controller being turned on is what actually produces traffic on
+  that interface: a short burst of non-button status/heartbeat
+  reports, then a slower periodic heartbeat. Only real traffic proves
+  the controller itself is connected -- this mirrors the equivalent
+  comment in hid_reader.py.
+- On first traffic after being disconnected, wait
+  HANDSHAKE_DELAY_SECONDS before sending the vendor init handshake
+  (sending it immediately was found to be unreliable -- see
+  tools/hid_handshake.py, which this delay was validated against).
+  This is a one-shot Win32 timer, not a blocking sleep, so it never
+  stalls the message loop.
+- If the dongle's interface disappears entirely, the connection is
+  considered dropped and the handshake is re-armed so the same
+  delayed-send happens again next time real traffic reappears.
+"""
+
+from __future__ import annotations
+
+import ctypes
+import ctypes.wintypes as wt
+import pathlib
+import sys
+import threading
+import time
+import traceback
+from typing import Callable, Optional
+
+import hid  # pip install hid -- used for the (rare) write-only handshake only
+
+from .constants import (
+    DEBOUNCE_SECONDS,
+    INIT_COMMANDS,
+    PRODUCT_ID,
+    REPORT_LENGTH,
+    STOP_COMMAND,
+    USAGE_PAGE,
+    VENDOR_ID,
+)
+from .hid_reader import ButtonEvent, ButtonPressed, ButtonReleased, decode_report
+
+EventCallback = Callable[[ButtonEvent], None]
+
+user32 = ctypes.windll.user32
+kernel32 = ctypes.windll.kernel32
+
+
+# ── Debug logging (mirrors src/shared/tray.py) ────────────────────────────────
+# --noconsole means stderr is invisible; route WNDPROC exceptions somewhere
+# visible instead of letting Windows silently swallow them.
+def _log_path() -> pathlib.Path:
+    try:
+        if getattr(sys, "frozen", False):
+            base = pathlib.Path(sys.executable).resolve().parent
+        else:
+            base = pathlib.Path(__file__).resolve().parents[2]
+    except Exception:
+        base = pathlib.Path(".")
+    return base / "tray_debug.log"
+
+
+def _log(message: str) -> None:
+    try:
+        with open(_log_path(), "a", encoding="utf-8") as fh:
+            fh.write(message + "\n")
+    except Exception:
+        pass
+
+
+# ── Win32 constants ───────────────────────────────────────────────────────────
+
+WM_INPUT = 0x00FF
+WM_INPUT_DEVICE_CHANGE = 0x00FE
+WM_TIMER = 0x0113
+WM_CLOSE = 0x0010
+WM_DESTROY = 0x0002
+
+GIDC_ARRIVAL = 1
+GIDC_REMOVAL = 2
+
+RIDEV_INPUTSINK = 0x00000100
+RIDEV_DEVNOTIFY = 0x00002000
+
+RID_INPUT = 0x10000003
+RIDI_DEVICENAME = 0x20000007
+
+# How long to wait after first seeing real controller traffic before
+# sending the vendor init handshake. Sending immediately on the first
+# report was unreliable in testing; kept mid-range of the validated
+# 5-10s window.
+HANDSHAKE_DELAY_SECONDS = 7.5
+_HANDSHAKE_TIMER_ID = 1
+
+_TARGET_VID_TAG = f"VID_{VENDOR_ID:04X}"
+_TARGET_PID_TAG = f"PID_{PRODUCT_ID:04X}"
+
+# LRESULT/WPARAM/LPARAM are pointer-sized on x64 Windows -- see the
+# identical note in tray.py. Getting this wrong corrupts the upper 32
+# bits of every value passed to/from Windows.
+LRESULT = ctypes.c_ssize_t
+WPARAM = ctypes.c_size_t
+LPARAM = ctypes.c_ssize_t
+
+WNDPROC = ctypes.WINFUNCTYPE(LRESULT, wt.HWND, ctypes.c_uint, WPARAM, LPARAM)
+
+
+class RAWINPUTDEVICE(ctypes.Structure):
+    _fields_ = [
+        ("usUsagePage", wt.USHORT),
+        ("usUsage", wt.USHORT),
+        ("dwFlags", wt.DWORD),
+        ("hwndTarget", wt.HWND),
+    ]
+
+
+class RAWINPUTHEADER(ctypes.Structure):
+    _fields_ = [
+        ("dwType", wt.DWORD),
+        ("dwSize", wt.DWORD),
+        ("hDevice", wt.HANDLE),
+        ("wParam", WPARAM),
+    ]
+
+
+class RAWHID(ctypes.Structure):
+    _fields_ = [
+        ("dwSizeHid", wt.DWORD),
+        ("dwCount", wt.DWORD),
+    ]
+
+
+class WNDCLASS(ctypes.Structure):
+    _fields_ = [
+        ("style", ctypes.c_uint),
+        ("lpfnWndProc", WNDPROC),
+        ("cbClsExtra", ctypes.c_int),
+        ("cbWndExtra", ctypes.c_int),
+        ("hInstance", wt.HINSTANCE),
+        ("hIcon", wt.HICON),
+        ("hCursor", wt.HANDLE),
+        ("hbrBackground", wt.HBRUSH),
+        ("lpszMenuName", wt.LPCWSTR),
+        ("lpszClassName", wt.LPCWSTR),
+    ]
+
+
+user32.RegisterRawInputDevices.argtypes = [
+    ctypes.POINTER(RAWINPUTDEVICE), ctypes.c_uint, ctypes.c_uint,
+]
+user32.RegisterRawInputDevices.restype = wt.BOOL
+
+user32.GetRawInputData.argtypes = [
+    wt.HANDLE, ctypes.c_uint, ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint), ctypes.c_uint,
+]
+user32.GetRawInputData.restype = ctypes.c_uint
+
+user32.GetRawInputDeviceInfoW.argtypes = [
+    wt.HANDLE, ctypes.c_uint, ctypes.c_void_p, ctypes.POINTER(ctypes.c_uint),
+]
+user32.GetRawInputDeviceInfoW.restype = ctypes.c_uint
+
+user32.CreateWindowExW.argtypes = [
+    wt.DWORD, ctypes.c_wchar_p, ctypes.c_wchar_p, wt.DWORD,
+    ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+    wt.HWND, wt.HMENU, wt.HINSTANCE, ctypes.c_void_p,
+]
+user32.CreateWindowExW.restype = wt.HWND
+user32.RegisterClassW.restype = wt.ATOM
+kernel32.GetModuleHandleW.restype = wt.HINSTANCE
+
+user32.DefWindowProcW.argtypes = [wt.HWND, ctypes.c_uint, WPARAM, LPARAM]
+user32.DefWindowProcW.restype = LRESULT
+
+user32.SetTimer.argtypes = [wt.HWND, ctypes.c_size_t, ctypes.c_uint, ctypes.c_void_p]
+user32.SetTimer.restype = ctypes.c_size_t
+user32.KillTimer.argtypes = [wt.HWND, ctypes.c_size_t]
+user32.KillTimer.restype = wt.BOOL
+
+
+def _send_command(path: bytes, command: tuple[int, ...]) -> None:
+    """
+    Open the vendor interface write-only just long enough to send one
+    command, then close it immediately. No read() is ever issued from
+    this handle, so it cannot race the Flydigi software (or our own
+    Raw Input listener) for incoming reports.
+    """
+    try:
+        device = hid.device()
+        device.open_path(path)
+        try:
+            payload = bytes(command) + bytes(REPORT_LENGTH - len(command))
+            device.write(bytes([0x00]) + payload)
+        finally:
+            device.close()
+    except Exception:
+        pass  # best-effort -- a failed handshake write should not crash the reader
+
+
+def _find_vendor_interface_path() -> Optional[bytes]:
+    """Same lookup HIDReaderThread used: the usage-page-0xFFA0 interface path."""
+    try:
+        candidates = hid.enumerate(VENDOR_ID, PRODUCT_ID)
+    except Exception:
+        return None
+    for info in candidates:
+        if info.get("interface_number") == 1 and info.get("usage_page") == USAGE_PAGE:
+            return info.get("path")
+    if candidates:
+        return candidates[0].get("path")
+    return None
+
+
+class RawInputReaderThread(threading.Thread):
+    """
+    Drop-in replacement for HIDReaderThread with the same public API
+    (constructor, start(), stop(), join()) but backed by Windows Raw
+    Input instead of a blocking hidapi read loop.
+
+    Runs its own hidden window and Win32 message loop on this thread --
+    it must not share a window/message loop with anything else (e.g.
+    tray.py's TrayIcon), so each gets its own.
+    """
+
+    _CLASS_NAME = "VaderRemapperRawInputWndClass"
+
+    def __init__(
+        self,
+        callback: EventCallback,
+        on_connection_change: Optional[Callable[[bool], None]] = None,
+        send_handshake: bool = True,
+    ) -> None:
+        super().__init__(name="RawInputReader", daemon=True)
+        self._callback = callback
+        self._on_connection_change = on_connection_change
+        self._send_handshake = send_handshake
+
+        self._hwnd: Optional[int] = None
+        self._wndproc_ref = WNDPROC(self._wndproc)
+        self._connected = False
+        self._handshake_armed = False  # timer currently pending
+
+        # Debounce state -- identical logic to HIDReaderThread._emit_deltas.
+        self._previous: frozenset[str] = frozenset()
+        self._debounced: set[str] = set()
+        self._last_change: dict[str, float] = {}
+
+        # Per-hDevice VID/PID verification cache -- avoids a string
+        # lookup on every single WM_INPUT once the controller is
+        # streaming at high rate.
+        self._verified_devices: set[int] = set()
+        self._rejected_devices: set[int] = set()
+
+    # ── Public API (matches HIDReaderThread) ─────────────────────────────────
+
+    def stop(self) -> None:
+        """Thread-safe: request the message loop to exit."""
+        if self._hwnd:
+            user32.PostMessageW(self._hwnd, WM_CLOSE, 0, 0)
+
+    # ── Thread body ───────────────────────────────────────────────────────────
+
+    def run(self) -> None:
+        if not self._create_window():
+            _log("RawInputReader: failed to create hidden window")
+            return
+
+        if not self._register_raw_input():
+            _log("RawInputReader: RegisterRawInputDevices failed")
+            user32.DestroyWindow(self._hwnd)
+            return
+
+        msg = wt.MSG()
+        while True:
+            ret = user32.GetMessageW(ctypes.byref(msg), None, 0, 0)
+            if ret <= 0:
+                break
+            user32.TranslateMessage(ctypes.byref(msg))
+            user32.DispatchMessageW(ctypes.byref(msg))
+
+    # ── Window / registration setup ──────────────────────────────────────────
+
+    def _create_window(self) -> bool:
+        hinstance = kernel32.GetModuleHandleW(None)
+        wc = WNDCLASS()
+        wc.style = 0
+        wc.lpfnWndProc = self._wndproc_ref
+        wc.cbClsExtra = 0
+        wc.cbWndExtra = 0
+        wc.hInstance = hinstance
+        wc.hIcon = None
+        wc.hCursor = None
+        wc.hbrBackground = None
+        wc.lpszMenuName = None
+        wc.lpszClassName = self._CLASS_NAME
+        user32.RegisterClassW(ctypes.byref(wc))
+
+        self._hwnd = user32.CreateWindowExW(
+            0, self._CLASS_NAME, "VaderRemapperRawInput",
+            0, 0, 0, 0, 0, None, None, hinstance, None,
+        )
+        return bool(self._hwnd)
+
+    def _register_raw_input(self) -> bool:
+        rid = RAWINPUTDEVICE(
+            usUsagePage=USAGE_PAGE,
+            usUsage=0x0001,
+            dwFlags=RIDEV_INPUTSINK | RIDEV_DEVNOTIFY,
+            hwndTarget=self._hwnd,
+        )
+        return bool(user32.RegisterRawInputDevices(ctypes.byref(rid), 1, ctypes.sizeof(rid)))
+
+    # ── Connection bookkeeping ───────────────────────────────────────────────
+
+    def _set_connected(self, connected: bool) -> None:
+        if connected == self._connected:
+            return
+        self._connected = connected
+        if self._on_connection_change:
+            try:
+                self._on_connection_change(connected)
+            except Exception:
+                pass
+
+    def _arm_handshake_timer(self) -> None:
+        if self._handshake_armed or not self._send_handshake:
+            return
+        self._handshake_armed = True
+        user32.SetTimer(self._hwnd, _HANDSHAKE_TIMER_ID, int(HANDSHAKE_DELAY_SECONDS * 1000), None)
+
+    def _disarm_handshake_timer(self) -> None:
+        if not self._handshake_armed:
+            return
+        self._handshake_armed = False
+        user32.KillTimer(self._hwnd, _HANDSHAKE_TIMER_ID)
+
+    def _send_handshake_now(self) -> None:
+        path = _find_vendor_interface_path()
+        if path is None:
+            return
+        for command in INIT_COMMANDS:
+            _send_command(path, command)
+
+    def _send_stop(self) -> None:
+        if not self._send_handshake:
+            return
+        path = _find_vendor_interface_path()
+        if path is None:
+            return
+        _send_command(path, STOP_COMMAND)
+
+    # ── Device identity check (cached per hDevice) ───────────────────────────
+
+    def _is_target_device(self, hdevice) -> bool:
+        key = int(hdevice) if hdevice else 0
+        if key in self._verified_devices:
+            return True
+        if key in self._rejected_devices:
+            return False
+
+        size = ctypes.c_uint(0)
+        user32.GetRawInputDeviceInfoW(hdevice, RIDI_DEVICENAME, None, ctypes.byref(size))
+        ok = False
+        if size.value:
+            buf = ctypes.create_unicode_buffer(size.value)
+            result = user32.GetRawInputDeviceInfoW(
+                hdevice, RIDI_DEVICENAME, buf, ctypes.byref(size)
+            )
+            if result != 0xFFFFFFFF:
+                name = buf.value.upper()
+                ok = _TARGET_VID_TAG in name and _TARGET_PID_TAG in name
+
+        (self._verified_devices if ok else self._rejected_devices).add(key)
+        return ok
+
+    # ── WM_INPUT handling ─────────────────────────────────────────────────────
+
+    def _handle_input(self, lparam) -> None:
+        size = ctypes.c_uint(0)
+        user32.GetRawInputData(
+            lparam, RID_INPUT, None, ctypes.byref(size), ctypes.sizeof(RAWINPUTHEADER)
+        )
+        if not size.value:
+            return
+
+        buf = ctypes.create_string_buffer(size.value)
+        copied = user32.GetRawInputData(
+            lparam, RID_INPUT, buf, ctypes.byref(size), ctypes.sizeof(RAWINPUTHEADER)
+        )
+        if copied != size.value:
+            return
+
+        raw = buf.raw
+        header = RAWINPUTHEADER.from_buffer_copy(raw)
+
+        if not self._is_target_device(header.hDevice):
+            return
+
+        header_size = ctypes.sizeof(RAWINPUTHEADER)
+        hid_data = raw[header_size:]
+        if len(hid_data) < ctypes.sizeof(RAWHID):
+            return
+        hid_header = RAWHID.from_buffer_copy(hid_data)
+        offset = ctypes.sizeof(RAWHID)
+        report = hid_data[offset:offset + hid_header.dwSizeHid]
+
+        # Any traffic at all on this interface proves the controller
+        # itself is connected (see module docstring) -- independent of
+        # whether this particular report decodes as button data.
+        if not self._connected:
+            self._set_connected(True)
+            self._arm_handshake_timer()
+
+        try:
+            current = decode_report(bytes(report))
+        except Exception:
+            return
+        if current is None:
+            return  # status/heartbeat report, not button data
+        self._emit_deltas(current)
+
+    def _emit_deltas(self, current: frozenset[str]) -> None:
+        """Identical logic to HIDReaderThread._emit_deltas."""
+        now = time.monotonic()
+        changed = current.symmetric_difference(self._previous)
+
+        for button in changed:
+            last = self._last_change.get(button, 0.0)
+            if now - last < DEBOUNCE_SECONDS:
+                continue
+
+            self._last_change[button] = now
+
+            is_pressed = button in current
+            was_pressed = button in self._debounced
+
+            if is_pressed and not was_pressed:
+                self._debounced.add(button)
+                self._callback(ButtonPressed(button))
+            elif not is_pressed and was_pressed:
+                self._debounced.discard(button)
+                self._callback(ButtonReleased(button))
+
+        self._previous = current
+
+    # ── WM_INPUT_DEVICE_CHANGE handling ──────────────────────────────────────
+
+    def _handle_device_change(self, wparam, lparam) -> None:
+        if wparam == GIDC_REMOVAL:
+            if self._is_target_device(lparam):
+                # Dongle's vendor interface is gone -- controller is
+                # unreachable regardless of prior state. Re-arm so the
+                # next real traffic (after reconnect) waits out the
+                # handshake delay again, same as a fresh connect.
+                key = int(lparam) if lparam else 0
+                self._verified_devices.discard(key)
+                self._rejected_devices.discard(key)
+                self._set_connected(False)
+                self._disarm_handshake_timer()
+                self._previous = frozenset()
+                self._debounced.clear()
+        # GIDC_ARRIVAL: the interface reappearing only means the dongle
+        # is plugged in again, not that the controller is on -- nothing
+        # to do until real WM_INPUT traffic shows up (see docstring).
+
+    # ── WndProc ──────────────────────────────────────────────────────────────
+
+    def _wndproc(self, hwnd, msg, wparam, lparam) -> int:
+        try:
+            if msg == WM_INPUT:
+                self._handle_input(lparam)
+                return 0
+            if msg == WM_INPUT_DEVICE_CHANGE:
+                self._handle_device_change(wparam, lparam)
+                return 0
+            if msg == WM_TIMER:
+                if wparam == _HANDSHAKE_TIMER_ID:
+                    self._disarm_handshake_timer()
+                    self._send_handshake_now()
+                return 0
+            if msg == WM_CLOSE:
+                user32.DestroyWindow(hwnd)
+                return 0
+            if msg == WM_DESTROY:
+                self._disarm_handshake_timer()
+                self._send_stop()
+                user32.PostQuitMessage(0)
+                return 0
+        except Exception:
+            _log("Exception in RawInputReader wndproc:\n" + traceback.format_exc())
+        return user32.DefWindowProcW(hwnd, msg, wparam, lparam)

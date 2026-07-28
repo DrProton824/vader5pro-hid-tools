@@ -8,7 +8,6 @@
 #   Usage Page : 0xFFA0
 #   Usage      : 0x0001
 #
-# Filters known idle/status heartbeat packets.
 # ============================================================
 
 import ctypes
@@ -39,13 +38,9 @@ USAGE = 0x0001
 # USAGE_PAGE = 0x01
 # USAGE = 0x02
 
-# Hide repeating dongle heartbeat/status packets
-FILTER_HEARTBEAT = True
-
-FILTERED_PACKETS = [
-    bytes([0x00, 0x5A, 0xA5, 0xEF])
-]
-
+# Filter Packages as bytes([...]), deactivated by default
+FILTER_ENABLE = False
+FILTERED_PACKETS = []
 
 SHOW_TIMESTAMP = True
 SHOW_LENGTH = False
@@ -159,11 +154,11 @@ def get_hid_report(lparam):
 
 def should_filter(data):
 
-    if not FILTER_HEARTBEAT:
+    if not FILTER_ENABLE:
         return False
 
     for packet in FILTERED_PACKETS:
-        if data.startswith(packet):
+        if data == packet:
             return True
 
     return False
@@ -237,7 +232,7 @@ def main():
     print(f"Device target : {DEVICE_NAME}")
     print(f"Usage Page    : 0x{USAGE_PAGE:04X}")
     print(f"Usage         : 0x{USAGE:04X}")
-    print(f"Heartbeat     : {'filtered' if FILTER_HEARTBEAT else 'visible'}")
+    print(f"Packet filter : {'enabled' if FILTER_ENABLE else 'disabled'}")
     print("=" * 45)
     print()
     print("Waiting for HID reports...")

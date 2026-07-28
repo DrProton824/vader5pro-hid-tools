@@ -6,7 +6,7 @@
 - **VID:** `0x37D7`
 - **PID:** `0x2401`
 
-The dongle exposes 4 different HID interfaces
+The USB receiver exposes four HID interfaces (MI_00–MI_03), each implementing a different HID function.
 
 ---
 
@@ -71,9 +71,17 @@ Reliable observations:
 
 ---
 
-# HID Interface List
+# USB Interface List/Summary
 
 When active, the dongle exposes four HID interfaces.
+
+| Interface | USB MI | Usage | Purpose |
+|-----------|---------|--------|---------|
+| Interface 0 | MI_00 | Generic Desktop / Gamepad | Standard controller input |
+| Interface 1 | MI_01 | Vendor (0xFFA0) | Vendor protocol / NewXInput |
+| Interface 2 | MI_02 | Generic Desktop / Mouse | Mouse HID interface (unused during normal operation) |
+| Interface 3 | MI_03 | Vendor (0xFFEE) | Vendor interface (purpose unknown) |
+
 
 ## Interface 0
 
@@ -102,7 +110,18 @@ Not observed:
 - No gyro data.
 - No accelerometer data.
 
-**Likely:** Standard HID/XInput-compatible interface (descriptor not yet fully verified).
+**Confirmed from the HID report descriptor:**
+
+- Generic Desktop / Gamepad
+- 14-byte input reports
+- 10 buttons
+- Hat switch
+- Left stick (X/Y)
+- Right stick (Rx/Ry)
+- Triggers (Z/Rz)
+
+No vendor-defined usages are present in the descriptor.
+
 
 ---
 
@@ -112,6 +131,13 @@ Not observed:
 |----------|-------|
 | Usage Page | `0xFFA0` |
 | Usage | `0x0001` |
+
+Descriptor summary:
+
+- 33-byte HID reports (32-byte payload + report ID slot)
+- 32-byte input reports
+- 32-byte output reports
+- No feature reports
 
 Vendor-specific NewXInput communication interface.
 Requires the vendor initialization command sequence for full communication
@@ -141,7 +167,20 @@ After vendor initialization:
 | Usage Page | `0x0001` |
 | Usage | `0x0002` |
 
-Exact purpose currently unknown.
+Appears as a standard HID mouse interface.
+
+Descriptor:
+
+- Usage Page: Generic Desktop
+- Usage: Mouse
+- Report ID: 2
+- 7-byte input reports
+- Five buttons
+- Relative X/Y movement
+- Mouse wheel
+
+No traffic has been observed during normal controller operation.
+Its practical purpose remains unknown.
 
 ---
 
@@ -152,7 +191,18 @@ Exact purpose currently unknown.
 | Usage Page | `0xFFEE` |
 | Usage | `0x0000` |
 
-Exact purpose currently unknown.
+Vendor-defined HID interface.
+
+Descriptor:
+
+- Usage Page: 0xFFEE
+- 64-byte input reports
+- 64-byte output reports
+- 64-byte feature reports
+- Report ID: 5
+
+No traffic has been observed during normal controller operation.
+Its practical purpose remains unknown.
 
 ---
 
@@ -175,7 +225,15 @@ Example observations:
 - Bytes 0–9 appear to contain analogue stick and trigger values.
 - Bytes 10–13 appear to contain button state bits.
 
-The exact report descriptor and field layout have not been decoded.
+The HID descriptor confirms the following report contents:
+
+- Buttons 1–10
+- Hat switch
+- Left stick (X/Y)
+- Right stick (Rx/Ry)
+- Two analogue triggers
+
+The exact byte offsets within the 14-byte report have not yet been mapped.
 
 ---
 
@@ -198,7 +256,7 @@ Report length:
 
 ## Startup Sequence
 
-Whenever the wireless controller connects, Interface 1 immediately emits an initialization burst **without any host interaction**.
+Whenever the wireless controller connects, Interface 1 automatically emits an initialization burst **without any host interaction**.
 
 Typical sequence:
 
@@ -428,7 +486,7 @@ Heartbeat should **not** be used for disconnect detection because:
 1. Wait for Interface 1 enumeration.
 2. Locate Interface 1.
 3. Open Interface 1.
-4. Wait for the first valid packet.
+4. Wait for the first valid Interface 1 packet (typically the automatic startup sequence).
 5. Mark the controller as connected.
 6. Send the recovered vendor initialization sequence if vendor reports are required.
 7. Read vendor reports continuously.

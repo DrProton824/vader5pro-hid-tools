@@ -33,20 +33,13 @@ USAGE = 0x0001
 # Hide repeating dongle heartbeat/status packets
 FILTER_HEARTBEAT = True
 
-
 FILTERED_PACKETS = [
-    bytes([
-        0x00,
-        0x5A,
-        0xA5,
-        0xEF
-    ])
+    bytes([0x00, 0x5A, 0xA5, 0xEF])
 ]
 
 
 SHOW_TIMESTAMP = True
 SHOW_LENGTH = False
-
 
 PAUSE_AFTER_EXIT = True
 
@@ -110,18 +103,14 @@ def register_raw_input(hwnd):
         hwnd
     )
 
-
     result = user32.RegisterRawInputDevices(
         ctypes.byref(rid),
         1,
         ctypes.sizeof(rid)
     )
 
-
     if not result:
-        raise RuntimeError(
-            "RegisterRawInputDevices failed"
-        )
+        raise RuntimeError("RegisterRawInputDevices failed")
 
 
 
@@ -133,7 +122,6 @@ def get_hid_report(lparam):
 
     size = wintypes.UINT(0)
 
-
     user32.GetRawInputData(
         lparam,
         RID_INPUT,
@@ -142,11 +130,7 @@ def get_hid_report(lparam):
         ctypes.sizeof(RAWINPUTHEADER)
     )
 
-
-    buffer = ctypes.create_string_buffer(
-        size.value
-    )
-
+    buffer = ctypes.create_string_buffer(size.value)
 
     user32.GetRawInputData(
         lparam,
@@ -156,34 +140,20 @@ def get_hid_report(lparam):
         ctypes.sizeof(RAWINPUTHEADER)
     )
 
-
     raw = buffer.raw
 
-
-    header_size = ctypes.sizeof(
-        RAWINPUTHEADER
-    )
-
+    header_size = ctypes.sizeof(RAWINPUTHEADER)
 
     hid_data = raw[header_size:]
-
 
     if len(hid_data) < ctypes.sizeof(RAWHID):
         return None
 
-
-    hid_header = RAWHID.from_buffer_copy(
-        hid_data
-    )
-
+    hid_header = RAWHID.from_buffer_copy(hid_data)
 
     offset = ctypes.sizeof(RAWHID)
 
-
-    return hid_data[
-        offset:
-        offset + hid_header.dwSizeHid
-    ]
+    return hid_data[offset:offset + hid_header.dwSizeHid]
 
 
 
@@ -196,12 +166,9 @@ def should_filter(data):
     if not FILTER_HEARTBEAT:
         return False
 
-
     for packet in FILTERED_PACKETS:
-
         if data.startswith(packet):
             return True
-
 
     return False
 
@@ -216,40 +183,19 @@ def print_packet(data):
     if should_filter(data):
         return
 
-
     output = []
 
-
     if SHOW_TIMESTAMP:
-
         output.append(
-            "[" +
-            datetime.now().strftime(
-                "%H:%M:%S.%f"
-            )[:-3]
-            +
-            "]"
+            "[" + datetime.now().strftime("%H:%M:%S.%f")[:-3] + "]"
         )
-
 
     if SHOW_LENGTH:
+        output.append(f"LEN={len(data)}")
 
-        output.append(
-            f"LEN={len(data)}"
-        )
+    output.append(" ".join(f"{b:02X}" for b in data))
 
-
-    output.append(
-        " ".join(
-            f"{b:02X}"
-            for b in data
-        )
-    )
-
-
-    print(
-        " ".join(output)
-    )
+    print(" ".join(output))
 
 
 
@@ -260,7 +206,6 @@ def print_packet(data):
 def wndproc(hwnd, msg, wparam, lparam):
 
     try:
-
         if msg == WM_INPUT:
 
             report = get_hid_report(lparam)
@@ -268,21 +213,10 @@ def wndproc(hwnd, msg, wparam, lparam):
             if report:
                 print_packet(report)
 
-
     except Exception as e:
+        print("RAW INPUT ERROR:", e)
 
-        print(
-            "RAW INPUT ERROR:",
-            e
-        )
-
-
-    return win32gui.DefWindowProc(
-        hwnd,
-        msg,
-        wparam,
-        lparam
-    )
+    return win32gui.DefWindowProc(hwnd, msg, wparam, lparam)
 
 
 
@@ -293,80 +227,44 @@ def wndproc(hwnd, msg, wparam, lparam):
 def main():
 
     wc = win32gui.WNDCLASS()
-
     wc.lpfnWndProc = wndproc
     wc.lpszClassName = "RawHIDMonitor"
 
-
-    atom = win32gui.RegisterClass(
-        wc
-    )
-
+    atom = win32gui.RegisterClass(wc)
 
     hwnd = win32gui.CreateWindow(
-        atom,
-        "Raw HID Monitor",
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
+        atom, "Raw HID Monitor",
+        0, 0, 0, 0, 0, 0, 0, 0,
         None
     )
 
-
     register_raw_input(hwnd)
-
 
     print()
     print("=" * 45)
     print(" RAW INPUT HID MONITOR")
     print("=" * 45)
-    print(
-        f"Device target : {DEVICE_NAME}"
-    )
-    print(
-        f"Usage Page    : 0x{USAGE_PAGE:04X}"
-    )
-    print(
-        f"Usage         : 0x{USAGE:04X}"
-    )
-    print(
-        f"Heartbeat     : {'filtered' if FILTER_HEARTBEAT else 'visible'}"
-    )
+    print(f"Device target : {DEVICE_NAME}")
+    print(f"Usage Page    : 0x{USAGE_PAGE:04X}")
+    print(f"Usage         : 0x{USAGE:04X}")
+    print(f"Heartbeat     : {'filtered' if FILTER_HEARTBEAT else 'visible'}")
     print("=" * 45)
     print()
     print("Waiting for HID reports...")
     print("CTRL+C stops capture.")
     print()
 
-
     try:
-
         while True:
-
             win32gui.PumpWaitingMessages()
-
             time.sleep(0.01)
 
-
     except KeyboardInterrupt:
-
         print()
-        print(
-            "Stopping capture."
-        )
-
+        print("Stopping capture.")
 
     if PAUSE_AFTER_EXIT:
-
-        input(
-            "Press ENTER to close..."
-        )
-
+        input("Press ENTER to close...")
 
 
 if __name__ == "__main__":

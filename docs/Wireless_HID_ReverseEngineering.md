@@ -277,9 +277,10 @@ Examples:
 
 | Raw bytes | Decoded version |
 |-----------|-----------------|
-| `05 45` | `0.5.4.5` |
 | `71 53` | `7.1.5.3` |
+| `04 67` | `0.4.6.7` |
 | `35 15` | `3.5.1.5` |
+| `10 26` | `1.0.2.6` |
 | `12 34` | `1.2.3.4` |
 
 Byte indices below are **zero-based** and refer to the complete 32-byte HID report.
@@ -287,41 +288,41 @@ For single-segment (Payload length = 1) 0x01 packets, the decoded firmware field
 
 | Byte(s) | Meaning |
 |---------|---------|
-| 12–13 | Main controller firmware |
-| 14–15 | Dongle firmware |
-| 16–17 | SI firmware |
-| 18–19 | Unknown |
-| 24–25 | RF firmware |
+| 11 | Unknown — variable field |
+| 12–14 | Unknown |
+| 15–16 | Controller firmware |
+| 17–18 | Dongle firmware |
+| 19–20 | SI firmware |
+| 21–26 | Unknown / padding |
+| 27–28 | RF firmware |
+| 29 | Unknown |
 
 Example:
 
 ```
-5A A5 01 01 00
-82 02 00 00 00 00
-05 45
-01 00
+5A A5 01 01 00 82 02 00 00 00 00
+?? 45 01 00
 71 53
 04 67
 35 15
 00 00 00 00 00 00
 10 26
 1F 00
-34
+CS
 ```
 
 Decoded values:
 
-| Component | Raw bytes | Version |
-|-----------|-----------|---------|
-| Main | `05 45` | `0.5.4.5` |
-| Dongle | `01 00` | `0.1.0.0` |
-| SI | `71 53` | `7.1.5.3` |
-| RF | `35 15` | `3.5.1.5` |
+| Component | Bytes | Raw | Version |
+|-----------|-------|-----|---------|
+| Controller | 15–16 | `71 53` | `7.1.5.3` |
+| Dongle | 17–18 | `04 67` | `0.4.6.7` |
+| SI | 19–20 | `35 15` | `3.5.1.5` |
+| RF | 27–28 | `10 26` | `1.0.2.6` |
 
+The purpose of bytes `11`, `12–14`, `29` and the padding region `21–26` is currently unknown.
 A firmware field containing `00 00` or `FF FF` should be considered absent
-or invalid rather than version `0.0.0.0`.
-
-The purpose of bytes `18–19` (`04 67` in the example above) is currently unknown.
+or invalid rather than a real version number.
 
 The reverse-engineered parser also supports segmented `0x01` packets
 (payload length > 1). In those packets the firmware fields are shifted by

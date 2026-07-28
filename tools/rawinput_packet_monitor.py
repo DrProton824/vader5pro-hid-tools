@@ -24,8 +24,26 @@ from datetime import datetime
 
 DEVICE_NAME = "Flydigi Vader HID"
 
+# Interface 1
+# Flydigi proprietary vendor HID command channel
 USAGE_PAGE = 0xFFA0
 USAGE = 0x0001
+
+
+"""
+OTHER OPTIONS:
+
+# Interface 0
+# Standard HID Gamepad collection
+USAGE_PAGE = 0x01
+USAGE = 0x05
+
+# Interface 2
+# Secondary HID collection
+USAGE_PAGE = 0x01
+USAGE = 0x02
+
+"""
 
 # Hide repeating dongle heartbeat/status packets
 FILTER_HEARTBEAT = True

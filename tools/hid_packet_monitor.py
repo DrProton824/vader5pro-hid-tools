@@ -15,7 +15,10 @@ def choose_interface():
     missing_reported = False
 
     while True:
-        devices = hid.enumerate(VID, PID)
+        devices = sorted(
+            hid.enumerate(VID, PID),
+            key=lambda d: d["interface_number"]
+        )
 
         if not devices:
             if not missing_reported:
@@ -31,9 +34,9 @@ def choose_interface():
 
         print("Available HID interfaces:\n")
 
-        for index, device in enumerate(devices, 1):
+        for device in devices:
             print(
-                f"  [{index}] "
+                f"  [{device['interface_number']}] "
                 f"Interface {device['interface_number']} | "
                 f"Usage Page 0x{device['usage_page']:04X} | "
                 f"Usage 0x{device['usage']:04X}"
@@ -43,16 +46,17 @@ def choose_interface():
             try:
                 selection = int(input("\nSelect interface to watch: "))
 
-                if 1 <= selection <= len(devices):
-                    selected = devices[selection - 1]
+                for device in devices:
+                    if device["interface_number"] == selection:
+                        selected = device
 
-                    suffix = (
-                        f"MI_{selected['interface_number']:02d}"
-                        f"_UP_{selected['usage_page']:04X}"
-                        f"_U_{selected['usage']:04X}"
-                    )
+                        suffix = (
+                            f"MI_{selected['interface_number']:02d}"
+                            f"_UP_{selected['usage_page']:04X}"
+                            f"_U_{selected['usage']:04X}"
+                        )
 
-                    return selected, f"hidlistener_{suffix}.txt"
+                        return selected, f"hidlistener_{suffix}.txt"
 
             except ValueError:
                 pass

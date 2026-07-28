@@ -11,13 +11,11 @@
 # Filters known idle/status heartbeat packets.
 # ============================================================
 
-
 import ctypes
 import ctypes.wintypes as wintypes
 import win32gui
 import time
 from datetime import datetime
-
 
 
 # ============================================================
@@ -28,7 +26,6 @@ DEVICE_NAME = "Flydigi Vader HID"
 
 USAGE_PAGE = 0xFFA0
 USAGE = 0x0001
-
 
 # Hide repeating dongle heartbeat/status packets
 FILTER_HEARTBEAT = True
@@ -43,8 +40,6 @@ SHOW_LENGTH = False
 
 PAUSE_AFTER_EXIT = True
 
-
-
 # ============================================================
 # WINDOWS CONSTANTS
 # ============================================================
@@ -55,10 +50,7 @@ RID_INPUT = 0x10000003
 RIDEV_INPUTSINK = 0x00000100
 RIDEV_DEVNOTIFY = 0x00002000
 
-
 user32 = ctypes.windll.user32
-
-
 
 # ============================================================
 # STRUCTURES
@@ -72,7 +64,6 @@ class RAWINPUTDEVICE(ctypes.Structure):
         ("hwndTarget", wintypes.HWND),
     ]
 
-
 class RAWINPUTHEADER(ctypes.Structure):
     _fields_ = [
         ("dwType", wintypes.DWORD),
@@ -81,14 +72,11 @@ class RAWINPUTHEADER(ctypes.Structure):
         ("wParam", wintypes.WPARAM),
     ]
 
-
 class RAWHID(ctypes.Structure):
     _fields_ = [
         ("dwSizeHid", wintypes.DWORD),
         ("dwCount", wintypes.DWORD),
     ]
-
-
 
 # ============================================================
 # RAW INPUT REGISTRATION
@@ -111,8 +99,6 @@ def register_raw_input(hwnd):
 
     if not result:
         raise RuntimeError("RegisterRawInputDevices failed")
-
-
 
 # ============================================================
 # EXTRACT HID REPORT
@@ -155,8 +141,6 @@ def get_hid_report(lparam):
 
     return hid_data[offset:offset + hid_header.dwSizeHid]
 
-
-
 # ============================================================
 # FILTERING
 # ============================================================
@@ -171,8 +155,6 @@ def should_filter(data):
             return True
 
     return False
-
-
 
 # ============================================================
 # DISPLAY
@@ -197,8 +179,6 @@ def print_packet(data):
 
     print(" ".join(output))
 
-
-
 # ============================================================
 # WINDOW PROCEDURE
 # ============================================================
@@ -217,8 +197,6 @@ def wndproc(hwnd, msg, wparam, lparam):
         print("RAW INPUT ERROR:", e)
 
     return win32gui.DefWindowProc(hwnd, msg, wparam, lparam)
-
-
 
 # ============================================================
 # MAIN

@@ -55,7 +55,7 @@ sys.path.insert(0, str(_ROOT))
 from src.shared import config as cfg
 from src.shared import single_instance
 from src.shared.config import ConfigWatcher
-from src.shared.hid_reader import HIDReaderThread
+from src.shared.rawinput_reader import RawInputReaderThread
 from src.shared.input_sender import InputSender
 from src.shared.mapper import ButtonMapper
 from src.shared.tray import TrayIcon
@@ -116,7 +116,7 @@ def main() -> None:
     # service to take effect for now.
     send_handshake = bool(settings.get("vendor_handshake", True))
 
-    reader = HIDReaderThread(
+    reader = RawInputReaderThread(
         callback=mapper.handle_event,
         on_connection_change=_on_connection_change,
         send_handshake=send_handshake,

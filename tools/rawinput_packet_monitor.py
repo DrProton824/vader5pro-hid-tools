@@ -23,6 +23,12 @@ from datetime import datetime
 
 DEVICE_NAME = "Flydigi Vader HID"
 
+TARGET_DEVICES = [
+    ("VID_37D7", "PID_2401"),  # Vader 5 Pro Receiver
+]
+
+RIDI_DEVICENAME = 0x20000007
+
 # Interface 0
 # Standard HID Gamepad collection (xbox 360)
 # USAGE_PAGE = 0x01
@@ -86,6 +92,44 @@ class RAWHID(ctypes.Structure):
     ]
 
 # ============================================================
+# DEVICE IDENTIFICATION
+# ============================================================
+
+def is_flydigi_device(hDevice):
+
+    size = wintypes.UINT(0)
+
+    user32.GetRawInputDeviceInfoW(
+        hDevice,
+        RIDI_DEVICENAME,
+        None,
+        ctypes.byref(size)
+    )
+
+    if size.value == 0:
+        return False
+
+    buffer = ctypes.create_unicode_buffer(size.value)
+
+    result = user32.GetRawInputDeviceInfoW(
+        hDevice,
+        RIDI_DEVICENAME,
+        buffer,
+        ctypes.byref(size)
+    )
+
+    if result == -1:
+        return False
+
+    path = buffer.value.upper()
+
+    for vid, pid in TARGET_DEVICES:
+        if vid in path and pid in path:
+            return True
+
+    return False
+
+# ============================================================
 # RAW INPUT REGISTRATION
 # ============================================================
 
@@ -134,6 +178,7 @@ def get_hid_report(lparam):
     )
 
     raw = buffer.raw
+    header = RAWINPUTHEADER.from_buffer_copy(raw)
 
     header_size = ctypes.sizeof(RAWINPUTHEADER)
 
@@ -146,7 +191,7 @@ def get_hid_report(lparam):
 
     offset = ctypes.sizeof(RAWHID)
 
-    return hid_data[offset:offset + hid_header.dwSizeHid]
+    return header, hid_data[offset:offset + hid_header.dwSizeHid]
 
 # ============================================================
 # FILTERING
@@ -195,10 +240,14 @@ def wndproc(hwnd, msg, wparam, lparam):
     try:
         if msg == WM_INPUT:
 
-            report = get_hid_report(lparam)
+            result = get_hid_report(lparam)
 
-            if report:
-                print_packet(report)
+            if result:
+
+                header, report = result
+
+                if is_flydigi_device(header.hDevice):
+                    print_packet(report)
 
     except Exception as e:
         print("RAW INPUT ERROR:", e)

@@ -1,11 +1,19 @@
 name: Build Windows Executables
 on:
-  workflow_dispatch:   # Manual trigger only - no push/tag trigger
+  workflow_dispatch:
     inputs:
       version:
         description: "Version number for this build (e.g. 1.2.0)"
         required: true
         default: "0.1.0"
+        type: string
+
+      publish:
+        description: "Publish GitHub Release"
+        required: true
+        default: false
+        type: boolean
+
 jobs:
   build:
     runs-on: windows-latest
@@ -32,6 +40,7 @@ jobs:
           name: VaderMapper-v${{ inputs.version }}
           path: dist/VaderMapper/
       - name: Create release
+        if: ${{ inputs.publish }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ inputs.version }}

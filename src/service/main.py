@@ -114,12 +114,12 @@ def main() -> None:
     # lives in config.json (see src/shared/config.py) so a future GUI
     # settings screen can flip it – that just requires restarting the
     # service to take effect for now.
-    send_handshake = bool(settings.get("vendor_handshake", True))
+    send_vendor_init = bool(settings.get("vendor_handshake", True))
 
     reader = RawInputReaderThread(
         callback=mapper.handle_event,
         on_connection_change=_on_connection_change,
-        send_handshake=send_handshake,
+        send_vendor_init=send_vendor_init,
     )
     reader.start()
 

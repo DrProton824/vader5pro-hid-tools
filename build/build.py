@@ -78,6 +78,7 @@ def _base_args(name: str, entry: Path, icon: Path | None = None) -> list[str]:
         "--workpath", str(ROOT / "build" / "work" / name),
         "--specpath", str(ROOT / "build"),
         "--collect-all", "hid",
+        "--exclude-module", "src.shared.legacy_hid_reader",
     ]
 
     if icon and icon.exists():

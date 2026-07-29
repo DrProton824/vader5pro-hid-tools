@@ -82,7 +82,18 @@ def _log(message: str) -> None:
 
     # Source run: visible console debugging
     if not getattr(sys, "frozen", False):
+        # Raw input uses \r to stay on one live line.
+        # Move to a fresh line before printing normal debug messages.
+        print()
         print(line)
+
+    # Disabled by default. Only enable manually for troubleshooting.
+    if DEBUG_FILE_LOGGING:
+        try:
+            with open(_log_path(), "a", encoding="utf-8") as fh:
+                fh.write(line + "\n")
+        except Exception:
+            pass
 
     # Disabled by default. Only enable manually for troubleshooting.
     if DEBUG_FILE_LOGGING:

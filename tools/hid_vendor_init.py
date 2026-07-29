@@ -1,5 +1,5 @@
 """
-Vader 5 Pro vendor HID handshake trigger.
+tools/vendor_init_trigger.py — Vader 5 Pro vendor HID initialization trigger.
 
 Waits for the vendor HID interface, sends the recovered initialization
 sequence on user confirmation, then sends the stop command and exits.
@@ -45,10 +45,9 @@ dev = hid.device()
 dev.open_path(path)
 
 print("Interface 1 found.")
+input("Press ENTER to send initialization sequence...")
+print("Sending initialization sequence...")
 
-input("Press ENTER to send handshake...")
-
-print("Sending handshake...")
 for cmd in INIT:
     send(dev, cmd)
     time.sleep(0.05)
@@ -56,12 +55,10 @@ for cmd in INIT:
 print("Handshake complete.")
 
 input("Press ENTER to send stop command...")
-
 print("Sending stop command...")
 send(dev, STOP)
 
 print("Waiting 5 seconds...")
 time.sleep(5)
-
 dev.close()
 print("Closed.")

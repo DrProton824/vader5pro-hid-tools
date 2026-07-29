@@ -116,6 +116,14 @@ GIDC_REMOVAL = 2
 RIDEV_INPUTSINK = 0x00000100
 RIDEV_DEVNOTIFY = 0x00002000
 
+# In some situations, the vendor interface (0xFFA0, 0x0001)
+# stays silent until its initialization sequence runs. 
+# Watching (0x01, 0x05) breaks this startup deadlock.
+# Button reports are still decoded only from (0xFFA0, 0x0001)
+# (0x01, 0x05) is used solely for connection detection.
+GENERIC_GAMEPAD_USAGE_PAGE = 0x01
+GENERIC_GAMEPAD_USAGE = 0x05
+
 RID_INPUT = 0x10000003
 RIDI_DEVICENAME = 0x20000007
 
@@ -309,13 +317,23 @@ class RawInputReaderThread(threading.Thread):
         return bool(self._hwnd)
 
     def _register_raw_input(self) -> bool:
-        rid = RAWINPUTDEVICE(
-            usUsagePage=USAGE_PAGE,
-            usUsage=0x0001,
-            dwFlags=RIDEV_INPUTSINK | RIDEV_DEVNOTIFY,
-            hwndTarget=self._hwnd,
+        devices = (RAWINPUTDEVICE * 2)(
+            RAWINPUTDEVICE(
+                usUsagePage=USAGE_PAGE,
+                usUsage=0x0001,
+                dwFlags=RIDEV_INPUTSINK | RIDEV_DEVNOTIFY,
+                hwndTarget=self._hwnd,
+            ),
+            RAWINPUTDEVICE(
+                usUsagePage=GENERIC_GAMEPAD_USAGE_PAGE,
+                usUsage=GENERIC_GAMEPAD_USAGE,
+                dwFlags=RIDEV_INPUTSINK | RIDEV_DEVNOTIFY,
+                hwndTarget=self._hwnd,
+            ),
         )
-        return bool(user32.RegisterRawInputDevices(ctypes.byref(rid), 1, ctypes.sizeof(rid)))
+        return bool(
+            user32.RegisterRawInputDevices(devices, 2, ctypes.sizeof(RAWINPUTDEVICE))
+        )
 
     # ── Connection bookkeeping ───────────────────────────────────────────────
 

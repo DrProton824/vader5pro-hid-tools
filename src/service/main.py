@@ -105,7 +105,7 @@ def main() -> None:
         if icon is not None:
             icon.update_status(connected)
 
-    # Vendor init/stop handshake – required on profiles that have no
+    # Vendor initialization/stop sequence – required on profiles that have no
     # macro/extra button currently assigned in the Flydigi software
     # (confirmed via tools/test_handshake.py: the vendor 0xFFA0
     # interface stays completely silent without it). Sent unconditionally
@@ -114,13 +114,13 @@ def main() -> None:
     # lives in config.json (see src/shared/config.py) so a future GUI
     # settings screen can flip it – that just requires restarting the
     # service to take effect for now.
-    send_vendor_init = bool(settings.get("vendor_handshake", True))
+    send_vendor_init = bool(settings.get("vendor_initialization", True))
 
-    reader = RawInputReaderThread(
-        callback=mapper.handle_event,
-        on_connection_change=_on_connection_change,
-        send_vendor_init=send_vendor_init,
-    )
+   reader = RawInputReaderThread(
+       callback=mapper.handle_event,
+       on_connection_change=_on_connection_change,
+       send_vendor_initialization=send_vendor_init,
+   )
     reader.start()
 
     stop_event = threading.Event()

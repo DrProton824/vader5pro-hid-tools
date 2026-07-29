@@ -241,6 +241,10 @@ class RawInputReaderThread(threading.Thread):
         self._verified_devices: set[int] = set()
         self._rejected_devices: set[int] = set()
 
+        # Coalesces consecutive "Raw input from <hDevice>" debug lines
+        self._pending_log_device: Optional[int] = None
+        self._pending_log_count: int = 0
+
     # ── Public API (matches HIDReaderThread) ─────────────────────────────────
 
     def stop(self) -> None:
@@ -369,7 +373,30 @@ class RawInputReaderThread(threading.Thread):
         return ok
 
     # ── WM_INPUT handling ─────────────────────────────────────────────────────
+    def _log_raw_input(self, hdevice) -> None:
+        """
+        Record one "raw input seen from this device" tick. Doesn't print
+        immediately - only accumulates a run length until _flush_raw_input_log
+        is called (on device change, disconnect, or shutdown), so a burst
+        of reports from the same device becomes one debug line instead of
+        one per report.
+        """
+        if hdevice == self._pending_log_device:
+            self._pending_log_count += 1
+            return
+        self._flush_raw_input_log()
+        self._pending_log_device = hdevice
+        self._pending_log_count = 1
 
+    def _flush_raw_input_log(self) -> None:
+        if self._pending_log_device is None:
+            return
+        suffix = f" x{self._pending_log_count}" if self._pending_log_count > 1 else ""
+        _log(f"Raw input from {self._pending_log_device}{suffix}")
+        self._pending_log_device = None
+        self._pending_log_count = 0
+
+  
     def _handle_input(self, lparam) -> None:
         size = ctypes.c_uint(0)
         user32.GetRawInputData(
@@ -387,7 +414,7 @@ class RawInputReaderThread(threading.Thread):
 
         raw = buf.raw
         header = RAWINPUTHEADER.from_buffer_copy(raw)
-        _log(f"Raw input from {header.hDevice}")
+        self._log_raw_input(header.hDevice)
 
         if not self._is_target_device(header.hDevice):
             return
@@ -454,6 +481,7 @@ class RawInputReaderThread(threading.Thread):
                 key = int(lparam) if lparam else 0
                 self._verified_devices.discard(key)
                 self._rejected_devices.discard(key)
+                self._flush_raw_input_log()
                 _log("Dongle removed")
                 self._set_connected(False)
                 self._disarm_vendor_init_timer()
@@ -482,6 +510,7 @@ class RawInputReaderThread(threading.Thread):
                 user32.DestroyWindow(hwnd)
                 return 0
             if msg == WM_DESTROY:
+                self._flush_raw_input_log()
                 self._disarm_vendor_init_timer()
                 self._send_vendor_stop()
                 user32.PostQuitMessage(0)

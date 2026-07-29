@@ -107,7 +107,7 @@ def main() -> None:
 
     # Vendor initialization/stop sequence – required on profiles that have no
     # macro/extra button currently assigned in the Flydigi software
-    # (confirmed via tools/vendor_init_trigger.py: the vendor 0xFFA0
+    # (confirmed via tools/hid_vendor_init.py: the vendor 0xFFA0
     # interface stays completely silent without it). Sent unconditionally
     # at startup and stopped at shutdown; no longer toggleable from the
     # tray to keep the context menu simple. The underlying setting still

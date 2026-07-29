@@ -34,7 +34,7 @@ REPORT_LENGTH = 32
 REPORT_MAGIC: tuple[int, int] = (0x5A, 0xA5)
 REPORT_TYPE_INPUT = 0xEF
 
-# ── Vendor initialization handshake (experimental) ────────────────────────────
+# ── Vendor initialization commands (experimental) ─────────────────────────────
 # Recovered from independent clean-room reverse-engineering of the same
 # vendor interface (ControlLab's Vader5Protocol.swift / Vader5Bridge.swift).
 # Format: 0x5A 0xA5 <cmd> <params...> <checksum>, checksum = 8-bit additive
@@ -43,7 +43,8 @@ REPORT_TYPE_INPUT = 0xEF
 # enable/disable flag for the extended (0xEF) report stream.
 # NOTE: our Windows hidapi backend already decodes buttons correctly
 # without sending anything, so this is untested here — treat as an
-# opt-in experiment (see hid_reader.SEND_VENDOR_HANDSHAKE), not a fix.
+# opt-in experiment (see vendor_init.py and RawInputReaderThread's
+# send_vendor_initialization flag), not a fix.
 INIT_COMMANDS: tuple[tuple[int, ...], ...] = (
     (0x5A, 0xA5, 0x01, 0x02, 0x03),
     (0x5A, 0xA5, 0xA1, 0x02, 0xA3),

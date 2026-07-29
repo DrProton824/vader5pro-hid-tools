@@ -1,5 +1,5 @@
 """
-Raw Input based HID reader thread -- replaces the hidapi polling reader.
+src/shared/rawinput_reader.py -- Raw Input based HID reader thread
 
 Why Windows Raw Input instead of hidapi?
 ─────────────────────────────────────────
@@ -67,6 +67,7 @@ kernel32 = ctypes.windll.kernel32
 
 DEBUG_FILE_LOGGING = False
 _CONSOLE_RAW_LINE_ACTIVE = False
+_CONSOLE_RAW_LINE_DEVICE: Optional[int] = None
 
 def _log_path() -> pathlib.Path:
     try:
@@ -79,7 +80,7 @@ def _log_path() -> pathlib.Path:
     return base / "tray_debug.log"
 
 def _log(message: str) -> None:
-    global _CONSOLE_RAW_LINE_ACTIVE
+    global _CONSOLE_RAW_LINE_ACTIVE, _CONSOLE_RAW_LINE_DEVICE
 
     line = f"{datetime.now():%H:%M:%S} {message}"
 
@@ -90,6 +91,7 @@ def _log(message: str) -> None:
         if _CONSOLE_RAW_LINE_ACTIVE:
             print()
             _CONSOLE_RAW_LINE_ACTIVE = False
+            _CONSOLE_RAW_LINE_DEVICE = None
 
         print(line)
 
@@ -259,8 +261,7 @@ class RawInputReaderThread(threading.Thread):
         self._rejected_devices: set[int] = set()
         self._present_devices: set[int] = set()
 
-        # One live-updating console row per hDevice
-        self._raw_input_rows: list[int] = []
+        # Per-hDevice running counters for (0xFFA0) and (0x01/0x05)
         self._raw_input_counts: dict[int, int] = {}
 
     # ── Public API (matches HIDReaderThread) ─────────────────────────────────
@@ -411,38 +412,37 @@ class RawInputReaderThread(threading.Thread):
         if getattr(sys, "frozen", False):
             return
 
-        global _CONSOLE_RAW_LINE_ACTIVE
+        global _CONSOLE_RAW_LINE_ACTIVE, _CONSOLE_RAW_LINE_DEVICE
 
         key = int(hdevice) if hdevice else 0
-        if key not in self._raw_input_counts:
-            self._raw_input_rows.append(key)
-            self._raw_input_counts[key] = 0
-            print()  # reserve this device its own row
+        self._raw_input_counts[key] = self._raw_input_counts.get(key, 0) + 1
 
-        self._raw_input_counts[key] += 1
-        row = self._raw_input_rows.index(key)
-        rows_below = len(self._raw_input_rows) - row
+        # Only overwrite in place if the same device was the last thing
+        # printed; any interruption (other device, or a plain _log call)
+        # commits that line first so nothing gets clobbered.
+        if _CONSOLE_RAW_LINE_ACTIVE and _CONSOLE_RAW_LINE_DEVICE != key:
+            print()
 
         text = f"{datetime.now():%H:%M:%S} Raw input from {key} x{self._raw_input_counts[key]}"
-        print(f"\x1b[{rows_below}A\r{text:<80}\x1b[{rows_below}B\r", end="", flush=True)
+        print(f"\r{text:<80}", end="", flush=True)
         _CONSOLE_RAW_LINE_ACTIVE = True
+        _CONSOLE_RAW_LINE_DEVICE = key
 
     def _end_raw_input_line(self) -> None:
-        global _CONSOLE_RAW_LINE_ACTIVE
+        global _CONSOLE_RAW_LINE_ACTIVE, _CONSOLE_RAW_LINE_DEVICE
 
-        if not self._raw_input_rows:
+        if not _CONSOLE_RAW_LINE_ACTIVE:
             return
 
         if not getattr(sys, "frozen", False):
-            print()  # move the cursor off the live block
+            print()
 
-        if DEBUG_FILE_LOGGING:
-            for key in self._raw_input_rows:
-                _log(f"Raw input from {key} x{self._raw_input_counts[key]}")
+        if DEBUG_FILE_LOGGING and _CONSOLE_RAW_LINE_DEVICE is not None:
+            count = self._raw_input_counts.get(_CONSOLE_RAW_LINE_DEVICE, 0)
+            _log(f"Raw input from {_CONSOLE_RAW_LINE_DEVICE} x{count}")
 
-        self._raw_input_rows.clear()
-        self._raw_input_counts.clear()
         _CONSOLE_RAW_LINE_ACTIVE = False
+        _CONSOLE_RAW_LINE_DEVICE = None
   
     def _handle_input(self, lparam) -> None:
         size = ctypes.c_uint(0)

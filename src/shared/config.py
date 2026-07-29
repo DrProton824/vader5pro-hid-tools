@@ -49,11 +49,12 @@ Settings = dict[str, object]
 SETTINGS_KEY = "_settings"
 
 DEFAULT_SETTINGS: Settings = {
-    # Sends the recovered vendor init/stop handshake before/after reading
-    # the HID interface. Confirmed necessary on Vader 5 Pro profiles that
-    # have no macro/extra button currently assigned in the Flydigi
-    # software — without it the vendor (0xFFA0) interface stays silent.
-    "vendor_handshake": True,
+    # Sends the recovered vendor initialization/stop command sequence
+    # before/after reading the HID interface. Confirmed necessary on
+    # Vader 5 Pro profiles that have no macro/extra button currently
+    # assigned in the Flydigi software — without it the vendor (0xFFA0)
+    # interface stays silent.
+    "vendor_initialization": True,
 }
 
 # ── Defaults ──────────────────────────────────────────────────────────────────

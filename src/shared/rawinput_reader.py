@@ -263,11 +263,11 @@ class RawInputReaderThread(threading.Thread):
         super().__init__(name="RawInputReader", daemon=True)
         self._callback = callback
         self._on_connection_change = on_connection_change
-        self._send_vendor_initialization = send_vendor_initialization
+        self._vendor_init_enabled = send_vendor_initialization
         self._hwnd: Optional[int] = None
         self._wndproc_ref = WNDPROC(self._wndproc)
         self._connected = False
-        self._handshake_armed = False  # timer currently pending
+        self._vendor_init_armed = False  # timer currently pending
 
         # Debounce state -- identical logic to HIDReaderThread._emit_deltas.
         self._previous: frozenset[str] = frozenset()
@@ -378,7 +378,7 @@ class RawInputReaderThread(threading.Thread):
         _log("Vendor initialization sequence completed")
 
     def _send_vendor_stop(self) -> None:
-        if not self._send_vendor_initialization:
+        if not self._vendor_init_enabled:
             return
         path = _find_vendor_interface_path()
         if path is None:

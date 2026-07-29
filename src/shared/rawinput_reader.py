@@ -383,22 +383,24 @@ class RawInputReaderThread(threading.Thread):
 
     # ── WM_INPUT handling ─────────────────────────────────────────────────────
     def _log_raw_input(self, hdevice) -> None:
-    global _CONSOLE_RAW_LINE_ACTIVE
+        global _CONSOLE_RAW_LINE_ACTIVE
 
-    # Log one "raw input seen from this device" tick, live.
-    if hdevice != self._pending_log_device:
-        self._end_raw_input_line()
-        self._pending_log_device = hdevice
-        self._pending_log_count = 0
+        # Log one "raw input seen from this device" tick, live.
+        if hdevice != self._pending_log_device:
+            self._end_raw_input_line()
+            self._pending_log_device = hdevice
+            self._pending_log_count = 0
 
-    self._pending_log_count += 1
+        self._pending_log_count += 1
 
-    if not getattr(sys, "frozen", False):
-        text = f"{datetime.now():%H:%M:%S} Raw input from {hdevice} x{self._pending_log_count}"
-        print(f"\r{text:<80}", end="", flush=True)
-        _CONSOLE_RAW_LINE_ACTIVE = True
+        if not getattr(sys, "frozen", False):
+            text = f"{datetime.now():%H:%M:%S} Raw input from {hdevice} x{self._pending_log_count}"
+            print(f"\r{text:<80}", end="", flush=True)
+            _CONSOLE_RAW_LINE_ACTIVE = True
 
     def _end_raw_input_line(self) -> None:
+        global _CONSOLE_RAW_LINE_ACTIVE
+
         """Finalize the in-progress live line, if any."""
         if self._pending_log_device is None:
             return
@@ -412,6 +414,7 @@ class RawInputReaderThread(threading.Thread):
 
         self._pending_log_device = None
         self._pending_log_count = 0
+        _CONSOLE_RAW_LINE_ACTIVE = False
   
     def _handle_input(self, lparam) -> None:
         size = ctypes.c_uint(0)

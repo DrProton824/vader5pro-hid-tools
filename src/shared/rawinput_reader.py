@@ -117,10 +117,6 @@ RIDI_DEVICENAME = 0x20000007
 VENDOR_INIT_DELAY_SECONDS = 5
 _VENDOR_INIT_TIMER_ID = 1
 
-# How often to flush the coalesced "Raw input from <hDevice> xN" debug
-RAW_INPUT_LOG_FLUSH_SECONDS = 1.0
-_RAW_INPUT_LOG_TIMER_ID = 2
-
 _TARGET_VID_TAG = f"VID_{VENDOR_ID:04X}"
 _TARGET_PID_TAG = f"PID_{PRODUCT_ID:04X}"
 
@@ -267,11 +263,6 @@ class RawInputReaderThread(threading.Thread):
             _log("RawInputReader: RegisterRawInputDevices failed")
             user32.DestroyWindow(self._hwnd)
             return
-
-        user32.SetTimer(
-            self._hwnd, _RAW_INPUT_LOG_TIMER_ID,
-            int(RAW_INPUT_LOG_FLUSH_SECONDS * 1000), None,
-        )
 
         msg = wt.MSG()
         while True:
@@ -519,14 +510,11 @@ class RawInputReaderThread(threading.Thread):
                 if wparam == _VENDOR_INIT_TIMER_ID:
                     self._disarm_vendor_init_timer()
                     self._send_vendor_initialization()
-                elif wparam == _RAW_INPUT_LOG_TIMER_ID:
-                    self._flush_raw_input_log()
                 return 0
             if msg == WM_CLOSE:
                 user32.DestroyWindow(hwnd)
                 return 0
             if msg == WM_DESTROY:
-                user32.KillTimer(hwnd, _RAW_INPUT_LOG_TIMER_ID)
                 self._end_raw_input_line()
                 self._disarm_vendor_init_timer()
                 self._send_vendor_stop()

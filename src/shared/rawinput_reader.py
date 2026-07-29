@@ -46,18 +46,13 @@ import traceback
 from typing import Callable, Optional
 from datetime import datetime
 
-import hid  # pip install hid -- used for the rare write-only vendor initialization path
-
-from .constants import (
-    DEBOUNCE_SECONDS,
-    INIT_COMMANDS,
-    PRODUCT_ID,
-    REPORT_LENGTH,
-    STOP_COMMAND,
-    USAGE_PAGE,
-    VENDOR_ID,
+from .constants import DEBOUNCE_SECONDS, PRODUCT_ID, USAGE_PAGE, VENDOR_ID
+from .hid_protocol import ButtonEvent, ButtonPressed, ButtonReleased, decode_report
+from .vendor_init import (
+    find_vendor_interface_path,
+    send_init_sequence,
+    send_stop_sequence,
 )
-from .hid_reader import ButtonEvent, ButtonPressed, ButtonReleased, decode_report
 
 EventCallback = Callable[[ButtonEvent], None]
 
@@ -207,40 +202,6 @@ user32.SetTimer.restype = ctypes.c_size_t
 user32.KillTimer.argtypes = [wt.HWND, ctypes.c_size_t]
 user32.KillTimer.restype = wt.BOOL
 
-
-def _send_command(path: bytes, command: tuple[int, ...]) -> None:
-    """
-    Open the vendor interface write-only just long enough to send one
-    command, then close it immediately. No read() is ever issued from
-    this handle, so it cannot race the Flydigi software (or our own
-    Raw Input listener) for incoming reports.
-    """
-    try:
-        device = hid.device()
-        device.open_path(path)
-        try:
-            payload = bytes(command) + bytes(REPORT_LENGTH - len(command))
-            device.write(bytes([0x00]) + payload)
-        finally:
-            device.close()
-    except Exception:
-        pass  # best-effort -- a failed vendor initialization write should not crash the reader
-
-
-def _find_vendor_interface_path() -> Optional[bytes]:
-    """Same lookup HIDReaderThread used: locate the vendor initialization interface."""
-    try:
-        candidates = hid.enumerate(VENDOR_ID, PRODUCT_ID)
-    except Exception:
-        return None
-    for info in candidates:
-        if info.get("interface_number") == 1 and info.get("usage_page") == USAGE_PAGE:
-            return info.get("path")
-    if candidates:
-        return candidates[0].get("path")
-    return None
-
-
 class RawInputReaderThread(threading.Thread):
     """
     Drop-in replacement for HIDReaderThread with the same public API
@@ -369,21 +330,19 @@ class RawInputReaderThread(threading.Thread):
         user32.KillTimer(self._hwnd, _VENDOR_INIT_TIMER_ID)
 
     def _send_vendor_initialization(self) -> None:
-        path = _find_vendor_interface_path()
+        path = find_vendor_interface_path()
         if path is None:
             return
-        
-        for command in INIT_COMMANDS:
-            _send_command(path, command)
+        send_init_sequence(path)
         _log("Vendor initialization sequence completed")
 
     def _send_vendor_stop(self) -> None:
         if not self._vendor_init_enabled:
             return
-        path = _find_vendor_interface_path()
+        path = find_vendor_interface_path()
         if path is None:
             return
-        _send_command(path, STOP_COMMAND)
+        send_stop_sequence(path)
 
     # ── Device identity check (cached per hDevice) ───────────────────────────
 

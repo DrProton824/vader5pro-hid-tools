@@ -257,10 +257,11 @@ class RawInputReaderThread(threading.Thread):
         # streaming at high rate.
         self._verified_devices: set[int] = set()
         self._rejected_devices: set[int] = set()
+        self._present_devices: set[int] = set()
 
-        # Coalesces consecutive "Raw input from <hDevice>" debug lines
-        self._pending_log_device: Optional[int] = None
-        self._pending_log_count: int = 0
+        # One live-updating console row per hDevice
+        self._raw_input_rows: list[int] = []
+        self._raw_input_counts: dict[int, int] = {}
 
     # ── Public API (matches HIDReaderThread) ─────────────────────────────────
 
@@ -407,37 +408,40 @@ class RawInputReaderThread(threading.Thread):
 
     # ── WM_INPUT handling ─────────────────────────────────────────────────────
     def _log_raw_input(self, hdevice) -> None:
+        if getattr(sys, "frozen", False):
+            return
+
         global _CONSOLE_RAW_LINE_ACTIVE
 
-        # Log one "raw input seen from this device" tick, live.
-        if hdevice != self._pending_log_device:
-            self._end_raw_input_line()
-            self._pending_log_device = hdevice
-            self._pending_log_count = 0
+        key = int(hdevice) if hdevice else 0
+        if key not in self._raw_input_counts:
+            self._raw_input_rows.append(key)
+            self._raw_input_counts[key] = 0
+            print()  # reserve this device its own row
 
-        self._pending_log_count += 1
+        self._raw_input_counts[key] += 1
+        row = self._raw_input_rows.index(key)
+        rows_below = len(self._raw_input_rows) - row
 
-        if not getattr(sys, "frozen", False):
-            text = f"{datetime.now():%H:%M:%S} Raw input from {hdevice} x{self._pending_log_count}"
-            print(f"\r{text:<80}", end="", flush=True)
-            _CONSOLE_RAW_LINE_ACTIVE = True
+        text = f"{datetime.now():%H:%M:%S} Raw input from {key} x{self._raw_input_counts[key]}"
+        print(f"\x1b[{rows_below}A\r{text:<80}\x1b[{rows_below}B\r", end="", flush=True)
+        _CONSOLE_RAW_LINE_ACTIVE = True
 
     def _end_raw_input_line(self) -> None:
         global _CONSOLE_RAW_LINE_ACTIVE
-        
-        """Finalize the in-progress live line, if any."""
-        if self._pending_log_device is None:
+
+        if not self._raw_input_rows:
             return
 
         if not getattr(sys, "frozen", False):
-            print()  # move off the overwritten line
+            print()  # move the cursor off the live block
 
         if DEBUG_FILE_LOGGING:
-            suffix = f" x{self._pending_log_count}" if self._pending_log_count > 1 else ""
-            _log(f"Raw input from {self._pending_log_device}{suffix}")
+            for key in self._raw_input_rows:
+                _log(f"Raw input from {key} x{self._raw_input_counts[key]}")
 
-        self._pending_log_device = None
-        self._pending_log_count = 0
+        self._raw_input_rows.clear()
+        self._raw_input_counts.clear()
         _CONSOLE_RAW_LINE_ACTIVE = False
   
     def _handle_input(self, lparam) -> None:
@@ -513,26 +517,31 @@ class RawInputReaderThread(threading.Thread):
     # ── WM_INPUT_DEVICE_CHANGE handling ──────────────────────────────────────
 
     def _handle_device_change(self, wparam, lparam) -> None:
+        key = int(lparam) if lparam else 0
+
         if wparam == GIDC_ARRIVAL:
-            _log("Dongle detected")
-        if wparam == GIDC_REMOVAL:
             if self._is_target_device(lparam):
-                # Dongle's vendor interface is gone -- controller is
-                # unreachable regardless of prior state. Re-arm so the
-                # next real traffic (after reconnect) waits out the
-                # vendor initialization delay again, same as a fresh connect.
-                key = int(lparam) if lparam else 0
-                self._verified_devices.discard(key)
-                self._rejected_devices.discard(key)
+                was_empty = not self._present_devices
+                self._present_devices.add(key)
+                if was_empty:
+                    _log("Dongle detected")
+            return
+
+        if wparam == GIDC_REMOVAL:
+            if key not in self._present_devices:
+                return
+            self._present_devices.discard(key)
+            # Re-arm so the next real traffic (after reconnect) waits out
+            # the vendor initialization delay again, same as a fresh connect.
+            self._verified_devices.discard(key)
+            self._rejected_devices.discard(key)
+            if not self._present_devices:
                 self._end_raw_input_line()
                 self._set_connected(False)
                 _log("Dongle removed")
                 self._disarm_vendor_init_timer(cancelled=True)
                 self._previous = frozenset()
                 self._debounced.clear()
-        # GIDC_ARRIVAL: the interface reappearing only means the dongle
-        # is plugged in again, not that the controller is on -- nothing
-        # to do until real WM_INPUT traffic shows up (see docstring).
 
     # ── WndProc ──────────────────────────────────────────────────────────────
 

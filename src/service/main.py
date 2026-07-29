@@ -116,11 +116,12 @@ def main() -> None:
     # service to take effect for now.
     send_vendor_init = bool(settings.get("vendor_initialization", True))
 
-   reader = RawInputReaderThread(
-       callback=mapper.handle_event,
-       on_connection_change=_on_connection_change,
-       send_vendor_initialization=send_vendor_init,
-   )
+    reader = RawInputReaderThread(
+        callback=mapper.handle_event,
+        on_connection_change=_on_connection_change,
+        send_vendor_initialization=send_vendor_init,
+    )
+   
     reader.start()
 
     stop_event = threading.Event()

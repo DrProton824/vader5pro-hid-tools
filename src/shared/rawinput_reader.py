@@ -261,12 +261,12 @@ class RawInputReaderThread(threading.Thread):
         self,
         callback: EventCallback,
         on_connection_change: Optional[Callable[[bool], None]] = None,
-        send_handshake: bool = True,
+        send_vendor_initialization: bool = True,
     ) -> None:
         super().__init__(name="RawInputReader", daemon=True)
         self._callback = callback
         self._on_connection_change = on_connection_change
-        self._send_handshake = send_handshake
+        self._send_vendor_initialization = send_vendor_initialization
 
         self._hwnd: Optional[int] = None
         self._wndproc_ref = WNDPROC(self._wndproc)
@@ -326,7 +326,11 @@ class RawInputReaderThread(threading.Thread):
         wc.hbrBackground = None
         wc.lpszMenuName = None
         wc.lpszClassName = self._CLASS_NAME
-        user32.RegisterClassW(ctypes.byref(wc))
+        atom = user32.RegisterClassW(ctypes.byref(wc))
+        if not atom:
+            # ERROR_CLASS_ALREADY_EXISTS is okay
+            if ctypes.get_last_error() != 1410:
+                return False
 
         self._hwnd = user32.CreateWindowExW(
             0, self._CLASS_NAME, "VaderRemapperRawInput",
@@ -356,7 +360,7 @@ class RawInputReaderThread(threading.Thread):
                 pass
 
     def _arm_handshake_timer(self) -> None:
-        if self._handshake_armed or not self._send_handshake:
+        if self._handshake_armed or not self._send_vendor_initialization:
             return
         self._handshake_armed = True
         user32.SetTimer(self._hwnd, _HANDSHAKE_TIMER_ID, int(HANDSHAKE_DELAY_SECONDS * 1000), None)
@@ -375,7 +379,7 @@ class RawInputReaderThread(threading.Thread):
             _send_command(path, command)
 
     def _send_stop(self) -> None:
-        if not self._send_handshake:
+        if not self._send_vendor_initialization:
             return
         path = _find_vendor_interface_path()
         if path is None:
@@ -425,6 +429,7 @@ class RawInputReaderThread(threading.Thread):
 
         raw = buf.raw
         header = RAWINPUTHEADER.from_buffer_copy(raw)
+        _log(f"Raw input from {header.hDevice}")
 
         if not self._is_target_device(header.hDevice):
             return

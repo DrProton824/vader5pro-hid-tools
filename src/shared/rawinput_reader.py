@@ -66,6 +66,7 @@ kernel32 = ctypes.windll.kernel32
 #   - Frozen exe: no console, no file logging
 
 DEBUG_FILE_LOGGING = False
+_CONSOLE_RAW_LINE_ACTIVE = False
 
 def _log_path() -> pathlib.Path:
     try:
@@ -78,13 +79,18 @@ def _log_path() -> pathlib.Path:
     return base / "tray_debug.log"
 
 def _log(message: str) -> None:
+    global _CONSOLE_RAW_LINE_ACTIVE
+
     line = f"{datetime.now():%H:%M:%S} {message}"
 
     # Source run: visible console debugging
     if not getattr(sys, "frozen", False):
         # Raw input uses \r to stay on one live line.
-        # Move to a fresh line before printing normal debug messages.
-        print()
+        # Break that line before printing normal messages.
+        if _CONSOLE_RAW_LINE_ACTIVE:
+            print()
+            _CONSOLE_RAW_LINE_ACTIVE = False
+
         print(line)
 
     # Disabled by default. Only enable manually for troubleshooting.
@@ -94,15 +100,7 @@ def _log(message: str) -> None:
                 fh.write(line + "\n")
         except Exception:
             pass
-
-    # Disabled by default. Only enable manually for troubleshooting.
-    if DEBUG_FILE_LOGGING:
-        try:
-            with open(_log_path(), "a", encoding="utf-8") as fh:
-                fh.write(line + "\n")
-        except Exception:
-            pass
-
+          
 
 # ── Win32 constants ───────────────────────────────────────────────────────────
 
@@ -385,18 +383,20 @@ class RawInputReaderThread(threading.Thread):
 
     # ── WM_INPUT handling ─────────────────────────────────────────────────────
     def _log_raw_input(self, hdevice) -> None:
-        # Log one "raw input seen from this device" tick, live.
-        if hdevice != self._pending_log_device:
-            self._end_raw_input_line()
-            self._pending_log_device = hdevice
-            self._pending_log_count = 0
-        self._pending_log_count += 1
+    global _CONSOLE_RAW_LINE_ACTIVE
 
-        if not getattr(sys, "frozen", False):
-            text = f"{datetime.now():%H:%M:%S} Raw input from {hdevice} x{self._pending_log_count}"
-            # Trailing spaces blank out any leftover tail from a longer
-            # previous line (e.g. after a device-id length change).
-            print(f"\r{text}   ", end="", flush=True)
+    # Log one "raw input seen from this device" tick, live.
+    if hdevice != self._pending_log_device:
+        self._end_raw_input_line()
+        self._pending_log_device = hdevice
+        self._pending_log_count = 0
+
+    self._pending_log_count += 1
+
+    if not getattr(sys, "frozen", False):
+        text = f"{datetime.now():%H:%M:%S} Raw input from {hdevice} x{self._pending_log_count}"
+        print(f"\r{text:<80}", end="", flush=True)
+        _CONSOLE_RAW_LINE_ACTIVE = True
 
     def _end_raw_input_line(self) -> None:
         """Finalize the in-progress live line, if any."""

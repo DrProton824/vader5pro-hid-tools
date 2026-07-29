@@ -333,29 +333,35 @@ class RawInputReaderThread(threading.Thread):
         if self._vendor_init_armed or not self._vendor_init_enabled:
             return
         self._vendor_init_armed = True
-        _log(f"Vendor initialization scheduled in {VENDOR_INIT_DELAY_SECONDS}s")
         user32.SetTimer(self._hwnd, _VENDOR_INIT_TIMER_ID, int(VENDOR_INIT_DELAY_SECONDS * 1000), None)
+        _log(f"Vendor initialization scheduled in {VENDOR_INIT_DELAY_SECONDS}s")
 
-    def _disarm_vendor_init_timer(self) -> None:
+    def _disarm_vendor_init_timer(self, cancelled: bool = False) -> None:
         if not self._vendor_init_armed:
             return
         self._vendor_init_armed = False
         user32.KillTimer(self._hwnd, _VENDOR_INIT_TIMER_ID)
 
+        if cancelled:
+            _log("Vendor initialization cancelled")
+
     def _send_vendor_initialization(self) -> None:
         path = find_vendor_interface_path()
         if path is None:
+            _log("Vendor initialization interface not found")
             return
         send_init_sequence(path)
-        _log("Vendor initialization sequence completed")
+        _log("Vendor initialization sequence sent")
 
     def _send_vendor_stop(self) -> None:
         if not self._vendor_init_enabled:
             return
         path = find_vendor_interface_path()
         if path is None:
+            _log("Vendor initialization interface not found")
             return
         send_stop_sequence(path)
+        _log("Vendor stop sequence sent")
 
     # ── Device identity check (cached per hDevice) ───────────────────────────
 
@@ -400,7 +406,7 @@ class RawInputReaderThread(threading.Thread):
 
     def _end_raw_input_line(self) -> None:
         global _CONSOLE_RAW_LINE_ACTIVE
-
+        
         """Finalize the in-progress live line, if any."""
         if self._pending_log_device is None:
             return
@@ -450,8 +456,8 @@ class RawInputReaderThread(threading.Thread):
         # connected. Interface presence alone is insufficient because the
         # dongle enumerates even while the controller is powered off.
         if not self._connected:
-            _log("Controller detected")
             self._set_connected(True)
+            _log("Controller detected")
             self._arm_vendor_init_timer()
 
         try:
@@ -501,9 +507,9 @@ class RawInputReaderThread(threading.Thread):
                 self._verified_devices.discard(key)
                 self._rejected_devices.discard(key)
                 self._end_raw_input_line()
-                _log("Dongle removed")
                 self._set_connected(False)
-                self._disarm_vendor_init_timer()
+                _log("Dongle removed")
+                self._disarm_vendor_init_timer(cancelled=True)
                 self._previous = frozenset()
                 self._debounced.clear()
         # GIDC_ARRIVAL: the interface reappearing only means the dongle

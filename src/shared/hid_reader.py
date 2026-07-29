@@ -1,37 +1,45 @@
 """
-HID reader thread.
+Legacy hidapi-based HID reader.
+
+Deprecated for the Windows service path: replaced by
+rawinput_reader.RawInputReaderThread.
+
+This module is kept as a reference implementation of the hidapi approach.
+It documents the direct HID read model, vendor interface selection, report
+decoding, and event generation flow. Do not run both readers against the
+same controller at the same time.
 
 Responsibilities
 ────────────────
 1. Open the Flydigi vendor HID interface via hidapi.
-2. Block on read() – zero CPU while waiting for a report.
-3. Decode the report using BUTTON_BITS.
-4. Compare with the previous report to detect press / release edges.
+2. Block on read() while waiting for reports.
+3. Decode reports using BUTTON_BITS.
+4. Compare reports to detect button press/release edges.
 5. Emit ButtonPressed / ButtonReleased events to a callback.
 6. Reconnect automatically after disconnect.
 
 Design choices
 ──────────────
 - Uses hid (the `hid` PyPI package wrapping hidapi.dll) for direct HID access.
-  No subprocess, no stdout parsing, no regex.
-- The reader runs in a daemon thread so it dies automatically when the
-  main process exits without needing an explicit shutdown signal in the
-  happy path.
-- Callbacks are called on the reader thread.  The mapper must not do
-  anything slow inside them.
+  No subprocess, stdout parsing, or device discovery hacks.
+- The reader runs as a daemon thread so it exits with the service process.
+- Callbacks execute on the reader thread; the mapper must not perform slow
+  work inside them.
 
 Picking the right interface
 ────────────────────────────
-The controller enumerates as *multiple* HID interfaces under the same
-VID/PID (an XInput-passthrough interface plus a vendor-specific one).
-``hid.device().open(vid, pid)`` just grabs whichever interface the OS
-lists first, which is usually the wrong one – the process opens
-successfully, read() never times out fatally, but no button bits ever
-change because the vendor reports are arriving on a *different* handle.
-We therefore enumerate all interfaces for this VID/PID and open the one
-whose usage page matches USAGE_PAGE (0xFFA0), exactly like
-tools/monitoring_buttons.py does via ``--usagePage 0xFFA0``.
+The controller exposes multiple HID interfaces under the same VID/PID
+(an XInput passthrough interface plus a vendor-specific interface).
+
+Opening by VID/PID alone can select the wrong interface: the handle opens
+successfully, but vendor reports arrive elsewhere and no button changes are
+seen.
+
+This implementation enumerates all matching interfaces and opens the one
+whose usage page matches USAGE_PAGE (0xFFA0), equivalent to the selection
+performed by tools/monitoring_buttons.py using ``--usagePage 0xFFA0``.
 """
+
 
 from __future__ import annotations
 
@@ -58,14 +66,15 @@ from .constants import (
 # Interface presence != controller connected (the dongle alone enumerates
 # all 4 interfaces with no controller paired). The only reliable connect
 # signal is real traffic on Interface 1.
-DEFAULT_SEND_VENDOR_HANDSHAKE = True
+DEFAULT_SEND_VENDOR_INITIALIZATION = True
 
-# After sending the handshake, how long to watch for a real high-rate
-# input stream (buttons/sticks/gyro) before concluding it didn't take.
-# The startup burst + 30s heartbeat alone won't cross HANDSHAKE_ACTIVE_THRESHOLD
-# reports in this window; live polling will.
-HANDSHAKE_VERIFY_SECONDS = 2.0
-HANDSHAKE_ACTIVE_THRESHOLD = 10
+# After sending vendor initialization commands, how long to watch for a real
+# high-rate input stream (buttons/sticks/gyro) before concluding they did not
+# activate the expected reporting mode.
+# The startup burst + 30s heartbeat alone won't cross
+# VENDOR_INITIALIZATION_ACTIVE_THRESHOLD reports in this window; live polling will.
+VENDOR_INITIALIZATION_VERIFY_SECONDS = 2.0
+VENDOR_INITIALIZATION_ACTIVE_THRESHOLD = 10
 
 # How often to re-confirm the vendor interface is still enumerated.
 # Interface disappearance is the disconnect signal, not read silence.
@@ -77,7 +86,8 @@ def _send_command(device: "hid.device", command: tuple[int, ...]) -> None:
     Best-effort output-report write. hidapi's write() expects the report
     ID as the first byte; this device uses unnumbered reports, so that
     byte is 0x00, followed by the command padded to REPORT_LENGTH bytes.
-    Never raises – a failed handshake write should not crash the reader.
+    Never raises; a failed vendor initialization command write should not
+    crash the reader.
     """
     try:
         payload = bytes(command) + bytes(REPORT_LENGTH - len(command))
@@ -158,7 +168,7 @@ class HIDReaderThread(threading.Thread):
         def on_event(event):
             print(event)
 
-        reader = HIDReaderThread(on_event)
+        reader = HIDReaderThread(callback=on_event)
         reader.start()
         # … later …
         reader.stop()
@@ -168,12 +178,12 @@ class HIDReaderThread(threading.Thread):
         self,
         callback: EventCallback,
         on_connection_change: Optional[Callable[[bool], None]] = None,
-        send_handshake: bool = DEFAULT_SEND_VENDOR_HANDSHAKE,
+        send_vendor_initialization: bool = DEFAULT_SEND_VENDOR_INITIALIZATION,
     ) -> None:
         super().__init__(name="HIDReader", daemon=True)
         self._callback = callback
         self._on_connection_change = on_connection_change
-        self._send_handshake = send_handshake
+        self._send_vendor_initialization = send_vendor_initialization
         self._stop_event = threading.Event()
 
         # Raw state from the previous HID report.
@@ -229,7 +239,7 @@ class HIDReaderThread(threading.Thread):
                 self._read_loop(device)
             finally:
                 self._set_connected(False)
-                if self._send_handshake:
+                if self._send_vendor_initialization:
                     _send_command(device, STOP_COMMAND)
                 try:
                     device.close()
@@ -283,14 +293,14 @@ class HIDReaderThread(threading.Thread):
     def _read_loop(self, device: "hid.device") -> None:
         """
         Read passively until real Interface 1 traffic confirms the
-        controller is connected, then send the handshake once. Verify it
-        actually produced a live input stream (not just heartbeat) and
-        resend at most once if it didn't. Disconnect = interface
+        controller is connected, then send vendor initialization commands once.
+        Verify they produced a live input stream (not just heartbeat)
+        and retry initialization at most once if they did not. Disconnect = interface
         disappearing, never read silence.
         """
         last_presence_check = time.monotonic()
-        handshake_sent = False
-        handshake_retried = False
+        vendor_initialization_sent = False
+        vendor_initialization_retried = False
         verify_window_start: Optional[float] = None
         verify_count = 0
 
@@ -305,16 +315,16 @@ class HIDReaderThread(threading.Thread):
             if report:
                 self._set_connected(True)
 
-                if not handshake_sent:
-                    if self._send_handshake:
+                if not vendor_initialization_sent:
+                    if self._send_vendor_initialization:
                         for command in INIT_COMMANDS:
                             _send_command(device, command)
                         verify_window_start = now
                         verify_count = 0
-                    handshake_sent = True
+                    vendor_initialization_sent = True
                 elif verify_window_start is not None:
                     verify_count += 1
-                    if verify_count >= HANDSHAKE_ACTIVE_THRESHOLD:
+                    if verify_count >= VENDOR_INITIALIZATION_ACTIVE_THRESHOLD:
                         verify_window_start = None  # confirmed active
 
                 report_bytes = bytes(report)
@@ -330,12 +340,12 @@ class HIDReaderThread(threading.Thread):
             # No data this read.
             if (
                 verify_window_start is not None
-                and now - verify_window_start >= HANDSHAKE_VERIFY_SECONDS
+                and now - verify_window_start >= VENDOR_INITIALIZATION_VERIFY_SECONDS
             ):
-                if not handshake_retried:
+                if not vendor_initialization_retried:
                     for command in INIT_COMMANDS:
                         _send_command(device, command)
-                    handshake_retried = True
+                    vendor_initialization_retried = True
                     verify_window_start = now
                     verify_count = 0
                 else:

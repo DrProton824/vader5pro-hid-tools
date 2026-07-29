@@ -3,51 +3,36 @@ Raw Input based HID reader thread -- replaces the hidapi polling reader.
 
 Why Windows Raw Input instead of hidapi?
 ─────────────────────────────────────────
-hidapi's blocking device.read() opens a read handle to the vendor
-interface and competes with any other process doing the same (notably
-the Flydigi SpaceStation software) for whatever gets delivered next.
-In practice this showed up as the two readers racing for packets --
-sometimes each only sees every other report, sometimes one starves
-the other entirely.
+hidapi's blocking device.read() consumes reports from the HID interface,
+which can race with other readers such as Flydigi SpaceStation. In
+practice this caused competing readers to miss packets or starve each
+other.
 
-Windows Raw Input (RegisterRawInputDevices / WM_INPUT) is not a
-read-and-consume model: every process that registers for a usage
-page/usage combination gets its own copy of each report, broadcast by
-the OS. Reading here can never starve the Flydigi software (or vice
-versa), and there's no blocking read call to service -- the thread
-just pumps a standard Win32 message loop, which is asleep (zero CPU)
-until Windows actually has something to deliver. That's both the fix
-for the read race and, incidentally, a lower-power design than a
-polling loop with a timeout.
+Windows Raw Input (RegisterRawInputDevices / WM_INPUT) is a broadcast
+model: every registered process receives its own copy of reports. This
+avoids read contention, requires no polling loop, and the thread sleeps
+at zero CPU usage while waiting in the normal Win32 message loop.
 
-Writing (the vendor init/stop handshake) is unaffected by any of this
--- Raw Input is read-only, so the handshake is still sent with a very
-short-lived hidapi write-only open/write/close, exactly like before.
-Short, infrequent (once per connect, once at shutdown) writes don't
-exhibit the same starvation problem reads did.
+Raw Input is read-only, so vendor initialization and shutdown commands
+still use a short-lived hidapi write-only open/write/close. These rare
+writes do not compete with report delivery like a blocking read does.
 
 Connection model
-─────────────────
-- The vendor interface (VID/PID, usage page 0xFFA0, usage 1) is
-  present in Windows' device list as long as the USB dongle is
-  plugged in -- regardless of whether the controller itself is
-  powered on. So interface arrival/removal (WM_INPUT_DEVICE_CHANGE)
-  tracks the *dongle*, not the controller.
-- The controller being turned on is what actually produces traffic on
-  that interface: a short burst of non-button status/heartbeat
-  reports, then a slower periodic heartbeat. Only real traffic proves
-  the controller itself is connected -- this mirrors the equivalent
-  comment in hid_reader.py.
-- On first traffic after being disconnected, wait
-  HANDSHAKE_DELAY_SECONDS before sending the vendor init handshake
-  (sending it immediately was found to be unreliable -- see
-  tools/hid_handshake.py, which this delay was validated against).
-  This is a one-shot Win32 timer, not a blocking sleep, so it never
-  stalls the message loop.
-- If the dongle's interface disappears entirely, the connection is
-  considered dropped and the handshake is re-armed so the same
-  delayed-send happens again next time real traffic reappears.
+────────────────
+- The vendor HID interface (VID/PID, usage page 0xFFA0, usage 1) exists
+  while the USB dongle is connected, even if the controller is off.
+  WM_INPUT_DEVICE_CHANGE therefore tracks the dongle, not controller
+  power state.
+- The controller is considered connected only after actual traffic is
+  received. Initial traffic is typically status/heartbeat reports,
+  followed by periodic heartbeats.
+- After first traffic following a disconnect, vendor initialization is
+  delayed by VENDOR_INIT_DELAY_SECONDS using a non-blocking Win32 timer.
+  Sending immediately was unreliable (validated in tools/hid_handshake.py).
+- If the dongle interface disappears, the connection state is cleared
+  and initialization is armed again for the next real controller traffic.
 """
+
 
 from __future__ import annotations
 
@@ -59,8 +44,9 @@ import threading
 import time
 import traceback
 from typing import Callable, Optional
+from datetime import datetime
 
-import hid  # pip install hid -- used for the (rare) write-only handshake only
+import hid  # pip install hid -- used for the rare write-only vendor initialization path
 
 from .constants import (
     DEBOUNCE_SECONDS,
@@ -79,9 +65,13 @@ user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
 
 
-# ── Debug logging (mirrors src/shared/tray.py) ────────────────────────────────
-# --noconsole means stderr is invisible; route WNDPROC exceptions somewhere
-# visible instead of letting Windows silently swallow them.
+# ── Debug logging ────────────────────────────────────────────────────────────
+# Default behaviour:
+#   - Running from python: print to console only
+#   - Frozen exe: no console, no file logging
+
+DEBUG_FILE_LOGGING = False
+
 def _log_path() -> pathlib.Path:
     try:
         if getattr(sys, "frozen", False):
@@ -92,13 +82,20 @@ def _log_path() -> pathlib.Path:
         base = pathlib.Path(".")
     return base / "tray_debug.log"
 
-
 def _log(message: str) -> None:
-    try:
-        with open(_log_path(), "a", encoding="utf-8") as fh:
-            fh.write(message + "\n")
-    except Exception:
-        pass
+    line = f"{datetime.now():%H:%M:%S} {message}"
+
+    # Source run: visible console debugging
+    if not getattr(sys, "frozen", False):
+        print(line)
+
+    # Disabled by default. Only enable manually for troubleshooting.
+    if DEBUG_FILE_LOGGING:
+        try:
+            with open(_log_path(), "a", encoding="utf-8") as fh:
+                fh.write(line + "\n")
+        except Exception:
+            pass
 
 
 # ── Win32 constants ───────────────────────────────────────────────────────────
@@ -119,11 +116,11 @@ RID_INPUT = 0x10000003
 RIDI_DEVICENAME = 0x20000007
 
 # How long to wait after first seeing real controller traffic before
-# sending the vendor init handshake. Sending immediately on the first
+# sending the vendor initialization sequence. Sending immediately on the first
 # report was unreliable in testing; kept mid-range of the validated
 # 5-10s window.
-HANDSHAKE_DELAY_SECONDS = 7.5
-_HANDSHAKE_TIMER_ID = 1
+VENDOR_INIT_DELAY_SECONDS = 5
+_VENDOR_INIT_TIMER_ID = 1
 
 _TARGET_VID_TAG = f"VID_{VENDOR_ID:04X}"
 _TARGET_PID_TAG = f"PID_{PRODUCT_ID:04X}"
@@ -227,11 +224,11 @@ def _send_command(path: bytes, command: tuple[int, ...]) -> None:
         finally:
             device.close()
     except Exception:
-        pass  # best-effort -- a failed handshake write should not crash the reader
+        pass  # best-effort -- a failed vendor initialization write should not crash the reader
 
 
 def _find_vendor_interface_path() -> Optional[bytes]:
-    """Same lookup HIDReaderThread used: the usage-page-0xFFA0 interface path."""
+    """Same lookup HIDReaderThread used: locate the vendor initialization interface."""
     try:
         candidates = hid.enumerate(VENDOR_ID, PRODUCT_ID)
     except Exception:
@@ -267,7 +264,6 @@ class RawInputReaderThread(threading.Thread):
         self._callback = callback
         self._on_connection_change = on_connection_change
         self._send_vendor_initialization = send_vendor_initialization
-
         self._hwnd: Optional[int] = None
         self._wndproc_ref = WNDPROC(self._wndproc)
         self._connected = False
@@ -359,26 +355,29 @@ class RawInputReaderThread(threading.Thread):
             except Exception:
                 pass
 
-    def _arm_handshake_timer(self) -> None:
-        if self._handshake_armed or not self._send_vendor_initialization:
+    def _arm_vendor_init_timer(self) -> None:
+        if self._vendor_init_armed or not self._vendor_init_enabled:
             return
-        self._handshake_armed = True
-        user32.SetTimer(self._hwnd, _HANDSHAKE_TIMER_ID, int(HANDSHAKE_DELAY_SECONDS * 1000), None)
+        self._vendor_init_armed = True
+        _log(f"Vendor initialization scheduled in {VENDOR_INIT_DELAY_SECONDS}s")
+        user32.SetTimer(self._hwnd, _VENDOR_INIT_TIMER_ID, int(VENDOR_INIT_DELAY_SECONDS * 1000), None)
 
-    def _disarm_handshake_timer(self) -> None:
-        if not self._handshake_armed:
+    def _disarm_vendor_init_timer(self) -> None:
+        if not self._vendor_init_armed:
             return
-        self._handshake_armed = False
-        user32.KillTimer(self._hwnd, _HANDSHAKE_TIMER_ID)
+        self._vendor_init_armed = False
+        user32.KillTimer(self._hwnd, _VENDOR_INIT_TIMER_ID)
 
-    def _send_handshake_now(self) -> None:
+    def _send_vendor_initialization(self) -> None:
         path = _find_vendor_interface_path()
         if path is None:
             return
+        
         for command in INIT_COMMANDS:
             _send_command(path, command)
+        _log("Vendor initialization sequence completed")
 
-    def _send_stop(self) -> None:
+    def _send_vendor_stop(self) -> None:
         if not self._send_vendor_initialization:
             return
         path = _find_vendor_interface_path()
@@ -442,12 +441,13 @@ class RawInputReaderThread(threading.Thread):
         offset = ctypes.sizeof(RAWHID)
         report = hid_data[offset:offset + hid_header.dwSizeHid]
 
-        # Any traffic at all on this interface proves the controller
-        # itself is connected (see module docstring) -- independent of
-        # whether this particular report decodes as button data.
+        # Traffic from the vendor interface indicates the controller is
+        # connected. Interface presence alone is insufficient because the
+        # dongle enumerates even while the controller is powered off.
         if not self._connected:
+            _log("Controller detected")
             self._set_connected(True)
-            self._arm_handshake_timer()
+            self._arm_vendor_init_timer()
 
         try:
             current = decode_report(bytes(report))
@@ -458,7 +458,7 @@ class RawInputReaderThread(threading.Thread):
         self._emit_deltas(current)
 
     def _emit_deltas(self, current: frozenset[str]) -> None:
-        """Identical logic to HIDReaderThread._emit_deltas."""
+        # Identical logic to HIDReaderThread._emit_deltas.
         now = time.monotonic()
         changed = current.symmetric_difference(self._previous)
 
@@ -484,17 +484,20 @@ class RawInputReaderThread(threading.Thread):
     # ── WM_INPUT_DEVICE_CHANGE handling ──────────────────────────────────────
 
     def _handle_device_change(self, wparam, lparam) -> None:
+        if wparam == GIDC_ARRIVAL:
+            _log("Dongle detected")
         if wparam == GIDC_REMOVAL:
             if self._is_target_device(lparam):
                 # Dongle's vendor interface is gone -- controller is
                 # unreachable regardless of prior state. Re-arm so the
                 # next real traffic (after reconnect) waits out the
-                # handshake delay again, same as a fresh connect.
+                # vendor initialization delay again, same as a fresh connect.
                 key = int(lparam) if lparam else 0
                 self._verified_devices.discard(key)
                 self._rejected_devices.discard(key)
+                _log("Dongle removed")
                 self._set_connected(False)
-                self._disarm_handshake_timer()
+                self._disarm_vendor_init_timer()
                 self._previous = frozenset()
                 self._debounced.clear()
         # GIDC_ARRIVAL: the interface reappearing only means the dongle
@@ -512,16 +515,16 @@ class RawInputReaderThread(threading.Thread):
                 self._handle_device_change(wparam, lparam)
                 return 0
             if msg == WM_TIMER:
-                if wparam == _HANDSHAKE_TIMER_ID:
-                    self._disarm_handshake_timer()
-                    self._send_handshake_now()
+                if wparam == _VENDOR_INIT_TIMER_ID:
+                    self._disarm_vendor_init_timer()
+                    self._send_vendor_initialization()
                 return 0
             if msg == WM_CLOSE:
                 user32.DestroyWindow(hwnd)
                 return 0
             if msg == WM_DESTROY:
-                self._disarm_handshake_timer()
-                self._send_stop()
+                self._disarm_vendor_init_timer()
+                self._send_vendor_stop()
                 user32.PostQuitMessage(0)
                 return 0
         except Exception:

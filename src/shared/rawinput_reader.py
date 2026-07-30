@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.wintypes as wt
+import os
 import pathlib
 import sys
 import threading
@@ -67,7 +68,7 @@ kernel32 = ctypes.windll.kernel32
 
 DEBUG_FILE_LOGGING = False
 _CONSOLE_RAW_LINE_ACTIVE = False
-_CONSOLE_RAW_LINE_DEVICE: Optional[int] = None
+_CONSOLE_RAW_LINE_LENGTH = 0
 
 def _log_path() -> pathlib.Path:
     try:
@@ -80,7 +81,7 @@ def _log_path() -> pathlib.Path:
     return base / "tray_debug.log"
 
 def _log(message: str) -> None:
-    global _CONSOLE_RAW_LINE_ACTIVE, _CONSOLE_RAW_LINE_DEVICE
+    global _CONSOLE_RAW_LINE_ACTIVE, _CONSOLE_RAW_LINE_LENGTH
 
     line = f"{datetime.now():%H:%M:%S} {message}"
 
@@ -91,7 +92,7 @@ def _log(message: str) -> None:
         if _CONSOLE_RAW_LINE_ACTIVE:
             print()
             _CONSOLE_RAW_LINE_ACTIVE = False
-            _CONSOLE_RAW_LINE_DEVICE = None
+            _CONSOLE_RAW_LINE_LENGTH = 0
 
         print(line)
 
@@ -261,8 +262,9 @@ class RawInputReaderThread(threading.Thread):
         self._rejected_devices: set[int] = set()
         self._present_devices: set[int] = set()
 
-        # Per-hDevice running counters for (0xFFA0) and (0x01/0x05)
-        self._raw_input_counts: dict[int, int] = {}
+        # Per-hDevice running counters and timestamps for (0xFFA0) and (0x01/0x05)
+        self._raw_input_data: dict[int, tuple[int, datetime]] = {}
+        self._device_labels: dict[int, str] = {}
 
     # ── Public API (matches HIDReaderThread) ─────────────────────────────────
 
@@ -407,29 +409,59 @@ class RawInputReaderThread(threading.Thread):
         (self._verified_devices if ok else self._rejected_devices).add(key)
         return ok
 
+    def _get_device_label(self, hdevice) -> str:
+        """Get a short label from the device path, e.g. 'VID_0C12&PID_1E10&MI_03'."""
+        size = ctypes.c_uint(0)
+        user32.GetRawInputDeviceInfoW(hdevice, RIDI_DEVICENAME, None, ctypes.byref(size))
+        if size.value:
+            buf = ctypes.create_unicode_buffer(size.value)
+            if user32.GetRawInputDeviceInfoW(hdevice, RIDI_DEVICENAME, buf, ctypes.byref(size)) != 0xFFFFFFFF:
+                parts = buf.value.split("#")
+                if len(parts) > 1:
+                    return parts[1]
+        return str(int(hdevice) if hdevice else 0)
+
     # ── WM_INPUT handling ─────────────────────────────────────────────────────
     def _log_raw_input(self, hdevice) -> None:
         if getattr(sys, "frozen", False):
             return
 
-        global _CONSOLE_RAW_LINE_ACTIVE, _CONSOLE_RAW_LINE_DEVICE
+        global _CONSOLE_RAW_LINE_ACTIVE, _CONSOLE_RAW_LINE_LENGTH
 
         key = int(hdevice) if hdevice else 0
-        self._raw_input_counts[key] = self._raw_input_counts.get(key, 0) + 1
+        now = datetime.now()
 
-        # Only overwrite in place if the same device was the last thing
-        # printed; any interruption (other device, or a plain _log call)
-        # commits that line first so nothing gets clobbered.
-        if _CONSOLE_RAW_LINE_ACTIVE and _CONSOLE_RAW_LINE_DEVICE != key:
-            print()
+        if key not in self._device_labels:
+            self._device_labels[key] = self._get_device_label(hdevice)
 
-        text = f"{datetime.now():%H:%M:%S} Raw input from {key} x{self._raw_input_counts[key]}"
-        print(f"\r{text:<80}", end="", flush=True)
+        old_count, _ = self._raw_input_data.get(key, (0, now))
+        self._raw_input_data[key] = (old_count + 1, now)
+
+        text = " | ".join(
+            f"{timestamp:%H:%M:%S} Raw input from {self._device_labels.get(device, str(device))} x{count}"
+            for device, (count, timestamp) in sorted(self._raw_input_data.items())
+        )
+
+        try:
+            max_width = min(os.get_terminal_size().columns - 1, len(text))
+        except OSError:
+            max_width = len(text)
+
+        truncated = text[:max_width]
+        padding = " " * max(0, _CONSOLE_RAW_LINE_LENGTH - max_width)
+
+        print(
+            f"\r{truncated}{padding}",
+            end="",
+            flush=True,
+        )
+
+        _CONSOLE_RAW_LINE_LENGTH = max_width
         _CONSOLE_RAW_LINE_ACTIVE = True
-        _CONSOLE_RAW_LINE_DEVICE = key
+
 
     def _end_raw_input_line(self) -> None:
-        global _CONSOLE_RAW_LINE_ACTIVE, _CONSOLE_RAW_LINE_DEVICE
+        global _CONSOLE_RAW_LINE_ACTIVE, _CONSOLE_RAW_LINE_LENGTH
 
         if not _CONSOLE_RAW_LINE_ACTIVE:
             return
@@ -437,12 +469,14 @@ class RawInputReaderThread(threading.Thread):
         if not getattr(sys, "frozen", False):
             print()
 
-        if DEBUG_FILE_LOGGING and _CONSOLE_RAW_LINE_DEVICE is not None:
-            count = self._raw_input_counts.get(_CONSOLE_RAW_LINE_DEVICE, 0)
-            _log(f"Raw input from {_CONSOLE_RAW_LINE_DEVICE} x{count}")
+        if DEBUG_FILE_LOGGING:
+            for device, (count, timestamp) in self._raw_input_data.items():
+                _log(f"Raw input from {device} x{count}")
 
         _CONSOLE_RAW_LINE_ACTIVE = False
-        _CONSOLE_RAW_LINE_DEVICE = None
+        _CONSOLE_RAW_LINE_LENGTH = 0
+        self._raw_input_data.clear()
+        self._device_labels.clear()
   
     def _handle_input(self, lparam) -> None:
         size = ctypes.c_uint(0)
@@ -542,6 +576,8 @@ class RawInputReaderThread(threading.Thread):
                 self._disarm_vendor_init_timer(cancelled=True)
                 self._previous = frozenset()
                 self._debounced.clear()
+                self._raw_input_data.clear()
+                self._device_labels.clear()
 
     # ── WndProc ──────────────────────────────────────────────────────────────
 

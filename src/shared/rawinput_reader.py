@@ -506,7 +506,9 @@ class RawInputReaderThread(threading.Thread):
             return
         hid_header = RAWHID.from_buffer_copy(hid_data)
         offset = ctypes.sizeof(RAWHID)
-        report = hid_data[offset:offset + hid_header.dwSizeHid]
+        # Drop GetRawInputData's report-ID byte (0x00 unnumbered reports) to
+        # match hidapi's Windows-stripped framing used by decode_report()/BUTTON_BITS.
+        report = hid_data[offset + 1:offset + hid_header.dwSizeHid]
 
         # Traffic from the vendor interface indicates the controller is
         # connected. Interface presence alone is insufficient because the
@@ -521,7 +523,7 @@ class RawInputReaderThread(threading.Thread):
         except Exception:
             return
         if current is None:
-            return  # status/heartbeat report, not button data
+            return
         self._emit_deltas(current)
 
     def _emit_deltas(self, current: frozenset[str]) -> None:

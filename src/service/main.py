@@ -1,5 +1,5 @@
 """
-VaderService – background remapper process.
+src/service/main.py — VaderService – background remapper process.
 
 Startup sequence
 ────────────────
@@ -31,6 +31,22 @@ import threading
 import time
 import pathlib
 
+import ctypes
+import subprocess
+import sys
+import threading
+import time
+import pathlib
+
+
+# Tell Windows this process handles DPI scaling itself.
+# Must happen before creating any Win32 windows.
+try:
+    ctypes.windll.user32.SetProcessDpiAwarenessContext(
+        ctypes.c_void_p(-4)  # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+    )
+except Exception:
+    pass
 
 def _bootstrap_path() -> pathlib.Path:
     """
@@ -162,8 +178,9 @@ def main() -> None:
         icon_holder["icon"].stop()
 
     icon = TrayIcon(
-        tooltip="Vader Remapper",
-        icon_path=_ROOT / "assets" / "icons" / "service.ico",
+        tooltip="V5Pro Remapper",
+        icon_path=_ROOT / "assets" / "icons" / "service_connected.ico",
+        disconnected_icon_path=_ROOT / "assets" / "icons" / "service_disconnected.ico",
         menu_items=[
             ("Open Config", _open_config),
             ("Exit", _quit),

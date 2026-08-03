@@ -1,5 +1,5 @@
 """
-Minimal Win32 system tray icon – no extra runtime dependencies.
+src/shared/tray.py — Minimal Win32 system tray icon for VaderService
 
 Why hand-rolled ctypes instead of pystray / infi.systray?
 ─────────────────────────────────────────────────────────
@@ -29,8 +29,12 @@ Usage
 ─────
     icon = TrayIcon(
         tooltip="Vader Remapper",
-        icon_path=pathlib.Path("assets/icons/service.ico"),
-        menu_items=[("Open Config", open_config), ("Exit", quit_app)],
+        icon_path=pathlib.Path("assets/icons/service_connected.ico"),
+        disconnected_icon_path=pathlib.Path("assets/icons/service_disconnected.ico"),
+        menu_items=[
+            ("Open Config", open_config),
+            ("Exit", quit_app),
+        ],
     )
     icon.update_status(False)   # optional initial state
     icon.run()      # blocks, pumping the Win32 message loop
@@ -86,6 +90,7 @@ WM_NCDESTROY = 0x0082
 WM_CLOSE = 0x0010
 WM_APP = 0x8000
 WM_TRAYICON = WM_APP + 1
+WM_UPDATE_ICON = WM_APP + 2
 WM_LBUTTONUP = 0x0202
 WM_RBUTTONUP = 0x0205
 WM_LBUTTONDOWN = 0x0201
@@ -99,7 +104,6 @@ WA_INACTIVE = 0
 VK_ESCAPE = 0x1B
 
 CS_DROPSHADOW = 0x00020000
-SPI_GETNONCLIENTMETRICS = 0x0029
 
 
 class LOGFONTW(ctypes.Structure):
@@ -120,25 +124,6 @@ class LOGFONTW(ctypes.Structure):
         ("lfFaceName", ctypes.c_wchar * 32),
     ]
 
-
-class NONCLIENTMETRICSW(ctypes.Structure):
-    _fields_ = [
-        ("cbSize", ctypes.c_uint),
-        ("iBorderWidth", ctypes.c_int),
-        ("iScrollWidth", ctypes.c_int),
-        ("iScrollHeight", ctypes.c_int),
-        ("iCaptionWidth", ctypes.c_int),
-        ("iCaptionHeight", ctypes.c_int),
-        ("lfCaptionFont", LOGFONTW),
-        ("iSmCaptionWidth", ctypes.c_int),
-        ("iSmCaptionHeight", ctypes.c_int),
-        ("lfSmCaptionFont", LOGFONTW),
-        ("iMenuWidth", ctypes.c_int),
-        ("iMenuHeight", ctypes.c_int),
-        ("lfMenuFont", LOGFONTW),
-        ("lfStatusFont", LOGFONTW),
-        ("lfMessageFont", LOGFONTW),
-    ]
 
 
 # Sentinel used in the items list to render a thin separator line instead
@@ -190,14 +175,13 @@ def _rgb(r: int, g: int, b: int) -> int:
 
 # Palette mirrors src/config_gui/main.py's C dict, so the tray menu
 # reads as part of the same app rather than a bare system menu.
-_COLOR_SURFACE = _rgb(0x1A, 0x25, 0x35)
-_COLOR_SELECTED = _rgb(0x2A, 0x5A, 0x8A)
-_COLOR_TEXT = _rgb(0xC8, 0xD8, 0xE8)
-_COLOR_TEXT_SELECTED = _rgb(0xE8, 0xF0, 0xF8)
-_COLOR_TEXT_DIM = _rgb(0x5A, 0x7A, 0x9A)
-_COLOR_BORDER = _rgb(0x3A, 0x5A, 0x8A)
-_COLOR_STATUS_ON = _rgb(0x3D, 0xD0, 0x7A)   # LED-style dot: controller connected
-_COLOR_STATUS_OFF = _rgb(0xD0, 0x46, 0x46)  # LED-style dot: controller not connected
+_COLOR_SURFACE = _rgb(0x2B, 0x2B, 0x2B)
+_COLOR_SELECTED = _rgb(0x35, 0x35, 0x35)   # hover fill, no separate hover text color
+_COLOR_TEXT = _rgb(0xF2, 0xF2, 0xF2)
+_COLOR_TEXT_DIM = _rgb(0x78, 0x78, 0x78)   # status text + disabled items
+_COLOR_BORDER = _rgb(0x3E, 0x3E, 0x3E)
+_COLOR_STATUS_ON = _rgb(0x53, 0xD0, 0x10)
+_COLOR_STATUS_OFF = _rgb(0xD0, 0x46, 0x46)  # unchanged, not covered by the design
 
 
 class WNDCLASS(ctypes.Structure):
@@ -311,23 +295,25 @@ gdi32.Ellipse.restype = wt.BOOL
 gdi32.CreateFontIndirectW.argtypes = [ctypes.c_void_p]
 gdi32.CreateFontIndirectW.restype = ctypes.c_void_p
 
-user32.SystemParametersInfoW.argtypes = [
-    ctypes.c_uint, ctypes.c_uint, ctypes.c_void_p, ctypes.c_uint,
-]
-user32.SystemParametersInfoW.restype = wt.BOOL
+gdi32.CreateRoundRectRgn.argtypes = [ctypes.c_int] * 6
+gdi32.CreateRoundRectRgn.restype = ctypes.c_void_p
+
+gdi32.RoundRect.argtypes = [wt.HDC] + [ctypes.c_int] * 6
+gdi32.RoundRect.restype = wt.BOOL
+
+gdi32.CreatePen.argtypes = [ctypes.c_int, ctypes.c_int, wt.DWORD]
+gdi32.CreatePen.restype = ctypes.c_void_p
+
+user32.SetWindowRgn.argtypes = [wt.HWND, ctypes.c_void_p, wt.BOOL]
+user32.SetWindowRgn.restype = ctypes.c_int
 
 
-def _get_menu_font() -> int:
-    """Return an HFONT matching the current OS context-menu font/size."""
-    ncm = NONCLIENTMETRICSW()
-    ncm.cbSize = ctypes.sizeof(NONCLIENTMETRICSW)
-    if user32.SystemParametersInfoW(
-        SPI_GETNONCLIENTMETRICS, ncm.cbSize, ctypes.byref(ncm), 0
-    ):
-        hfont = gdi32.CreateFontIndirectW(ctypes.byref(ncm.lfMenuFont))
-        if hfont:
-            return hfont
-    return gdi32.GetStockObject(DEFAULT_GUI_FONT)
+def _create_font(height_px: int, weight: int, face: str = "Segoe UI") -> int:
+    lf = LOGFONTW()
+    lf.lfHeight = -abs(height_px)
+    lf.lfWeight = weight
+    lf.lfFaceName = face
+    return gdi32.CreateFontIndirectW(ctypes.byref(lf)) or gdi32.GetStockObject(DEFAULT_GUI_FONT)
 
 user32.CreateWindowExW.argtypes = [
     wt.DWORD, ctypes.c_wchar_p, ctypes.c_wchar_p, wt.DWORD,
@@ -353,12 +339,18 @@ user32.DefWindowProcW.restype = LRESULT
 #  nothing left for the OS to silently override.
 # ═══════════════════════════════════════════════════════════════════════════
 
-_ITEM_HEIGHT = 26
-_SEPARATOR_HEIGHT = 7
-_PAD_X = 16
-_MIN_WIDTH = 170
-_DOT_SIZE = 8
-_DOT_TEXT_GAP = 8
+_ITEM_HEIGHT = 42
+_STATUS_HEIGHT = 38
+_SEPARATOR_HEIGHT = 9
+_TEXT_LEFT = 54
+_CONTENT_RIGHT_PAD = 11
+_MIN_WIDTH = 260
+_DOT_LEFT = 30
+_DOT_SIZE = 11
+_CORNER_RADIUS = 10
+NULL_BRUSH = 5
+FW_LIGHT = 300
+FW_NORMAL = 400
 
 _MENU_CLASS_NAME = "VaderRemapperMenuWndClass"
 _menu_class_registered = False
@@ -394,7 +386,7 @@ def _ensure_menu_class_registered() -> None:
     wc.cbWndExtra = 0
     wc.hInstance = hinstance
     wc.hIcon = None
-    wc.hCursor = None
+    wc.hCursor = user32.LoadCursorW(None, ctypes.c_void_p(32512))
     wc.hbrBackground = None
     wc.lpszMenuName = None
     wc.lpszClassName = _MENU_CLASS_NAME
@@ -425,31 +417,37 @@ class _MenuPopup:
         self._item_rects: list[tuple[int, int, int, int]] = []
         self._width = _MIN_WIDTH
         self._height = 0
-        self._font = _get_menu_font()
+        self._font_item = _create_font(17, FW_LIGHT)
+        self._font_status = _create_font(15, FW_NORMAL)
 
     # ── Layout / show ───────────────────────────────────────────────────
 
     def _measure(self) -> None:
         hdc = user32.GetDC(None)
-        gdi32.SelectObject(hdc, self._font)
         max_text_w = 0
         for label, _cb, dot in self._items:
             if label is MENU_SEPARATOR:
                 continue
+            gdi32.SelectObject(hdc, self._font_status if dot is not None else self._font_item)
             size = SIZE()
             gdi32.GetTextExtentPoint32W(hdc, label, len(label), ctypes.byref(size))
-            extra = (_DOT_SIZE + _DOT_TEXT_GAP) if dot is not None else 0
-            max_text_w = max(max_text_w, size.cx + extra)
+            max_text_w = max(max_text_w, size.cx)
         user32.ReleaseDC(None, hdc)
-        self._width = max(_MIN_WIDTH, max_text_w + _PAD_X * 2)
+        self._width = max(_MIN_WIDTH, _TEXT_LEFT + max_text_w + _CONTENT_RIGHT_PAD)
 
-        y = 4
+        y = 0
         self._item_rects = []
-        for label, _cb, _dot in self._items:
-            row_h = _SEPARATOR_HEIGHT if label is MENU_SEPARATOR else _ITEM_HEIGHT
+        for label, _cb, dot in self._items:
+            if label is MENU_SEPARATOR:
+                row_h = _SEPARATOR_HEIGHT
+            elif dot is not None:
+                row_h = _STATUS_HEIGHT
+            else:
+                row_h = _ITEM_HEIGHT
+
             self._item_rects.append((0, y, self._width, y + row_h))
             y += row_h
-        self._height = y + 4
+        self._height = y
 
     def show(self, x: int, y: int) -> None:
         _ensure_menu_class_registered()
@@ -472,6 +470,12 @@ class _MenuPopup:
         )
         if not hwnd:
             return
+            
+        region = gdi32.CreateRoundRectRgn(
+            0, 0, self._width + 1, self._height + 1, _CORNER_RADIUS, _CORNER_RADIUS
+        )
+        if region:
+            user32.SetWindowRgn(hwnd, region, True)
 
         self._hwnd = hwnd
         _menu_instances[hwnd] = self
@@ -480,6 +484,14 @@ class _MenuPopup:
         user32.SetForegroundWindow(hwnd)
 
     def _close(self) -> None:
+        if self._font_item:
+            gdi32.DeleteObject(self._font_item)
+            self._font_item = None
+
+        if self._font_status:
+            gdi32.DeleteObject(self._font_status)
+            self._font_status = None
+
         if self._hwnd:
             hwnd = self._hwnd
             self._hwnd = None
@@ -546,7 +558,6 @@ class _MenuPopup:
         user32.FillRect(hdc, ctypes.byref(rc), bg_brush)
         gdi32.DeleteObject(bg_brush)
 
-        gdi32.SelectObject(hdc, self._font)
         gdi32.SetBkMode(hdc, 1)  # TRANSPARENT
 
         for i, (label, cb, dot) in enumerate(self._items):
@@ -554,55 +565,62 @@ class _MenuPopup:
 
             if label is MENU_SEPARATOR:
                 mid_y = (t + b) // 2
-                sep_rc = wt.RECT(l + 4, mid_y, r - 4, mid_y + 1)
+                sep_rc = wt.RECT(l + _CONTENT_RIGHT_PAD, mid_y, r - _CONTENT_RIGHT_PAD, mid_y + 1)
                 sep_brush = gdi32.CreateSolidBrush(_COLOR_BORDER)
                 user32.FillRect(hdc, ctypes.byref(sep_rc), sep_brush)
                 gdi32.DeleteObject(sep_brush)
                 continue
 
-            disabled = cb is None
-            selected = (i == self._hot_index) and not disabled
+            is_status_row = dot is not None
+            gdi32.SelectObject(hdc, self._font_status if is_status_row else self._font_item)
+
+            disabled = cb is None and not is_status_row
+            selected = (i == self._hot_index) and cb is not None
 
             if selected:
-                item_rc = wt.RECT(l + 2, t, r - 2, b)
+                item_rc = wt.RECT(l + 7, t + 3, r - 7, b - 3)
+
                 sel_brush = gdi32.CreateSolidBrush(_COLOR_SELECTED)
-                user32.FillRect(hdc, ctypes.byref(item_rc), sel_brush)
+                old_brush = gdi32.SelectObject(hdc, sel_brush)
+
+                null_pen = gdi32.GetStockObject(NULL_PEN)
+                old_pen = gdi32.SelectObject(hdc, null_pen)
+
+                gdi32.RoundRect(hdc, item_rc.left, item_rc.top, item_rc.right,item_rc.bottom, 8, 8)
+
+                gdi32.SelectObject(hdc, old_pen)
+                gdi32.SelectObject(hdc, old_brush)
+
                 gdi32.DeleteObject(sel_brush)
 
-            if disabled:
-                text_color = _COLOR_TEXT_DIM
-            elif selected:
-                text_color = _COLOR_TEXT_SELECTED
-            else:
-                text_color = _COLOR_TEXT
-            gdi32.SetTextColor(hdc, text_color)
+            gdi32.SetTextColor(hdc, _COLOR_TEXT_DIM if (disabled or is_status_row) else _COLOR_TEXT)
 
-            text_left = l + _PAD_X
-            if dot is not None:
+            text_left = l + _TEXT_LEFT
+            if is_status_row:
                 dot_color = _COLOR_STATUS_ON if dot else _COLOR_STATUS_OFF
                 mid_y = (t + b) // 2
                 dot_top = mid_y - _DOT_SIZE // 2
+                dot_left = l + _DOT_LEFT
                 dot_brush = gdi32.CreateSolidBrush(dot_color)
+                dot_pen = gdi32.CreatePen(0, 1, _COLOR_BORDER)  # PS_SOLID
                 old_brush = gdi32.SelectObject(hdc, dot_brush)
-                old_pen = gdi32.SelectObject(hdc, gdi32.GetStockObject(NULL_PEN))
-                gdi32.Ellipse(
-                    hdc, l + _PAD_X, dot_top,
-                    l + _PAD_X + _DOT_SIZE, dot_top + _DOT_SIZE,
-                )
+                old_pen = gdi32.SelectObject(hdc, dot_pen)
+                gdi32.Ellipse(hdc, dot_left, dot_top, dot_left + _DOT_SIZE, dot_top + _DOT_SIZE)
                 gdi32.SelectObject(hdc, old_pen)
                 gdi32.SelectObject(hdc, old_brush)
                 gdi32.DeleteObject(dot_brush)
-                text_left = l + _PAD_X + _DOT_SIZE + _DOT_TEXT_GAP
+                gdi32.DeleteObject(dot_pen)
 
-            text_rc = wt.RECT(text_left, t, r - _PAD_X, b)
-            user32.DrawTextW(
-                hdc, label, -1, ctypes.byref(text_rc),
-                DT_SINGLELINE | DT_VCENTER | DT_LEFT,
-            )
+            text_rc = wt.RECT(text_left, t, r - _CONTENT_RIGHT_PAD, b)
+            user32.DrawTextW(hdc, label, -1, ctypes.byref(text_rc), DT_SINGLELINE | DT_VCENTER | DT_LEFT)
 
-        border_brush = gdi32.CreateSolidBrush(_COLOR_BORDER)
-        user32.FrameRect(hdc, ctypes.byref(rc), border_brush)
-        gdi32.DeleteObject(border_brush)
+        border_pen = gdi32.CreatePen(0, 1, _COLOR_BORDER)
+        old_pen = gdi32.SelectObject(hdc, border_pen)
+        old_brush = gdi32.SelectObject(hdc, gdi32.GetStockObject(NULL_BRUSH))
+        gdi32.RoundRect(hdc, 0, 0, self._width, self._height, _CORNER_RADIUS, _CORNER_RADIUS)
+        gdi32.SelectObject(hdc, old_pen)
+        gdi32.SelectObject(hdc, old_brush)
+        gdi32.DeleteObject(border_pen)
 
         user32.EndPaint(self._hwnd, ctypes.byref(ps))
 
@@ -618,11 +636,13 @@ class TrayIcon:
         self,
         tooltip: str,
         icon_path: Optional[pathlib.Path],
-        menu_items: list[tuple[str, Callable[[], None]]],
+        disconnected_icon_path: Optional[pathlib.Path] = None,
+        menu_items: Optional[list[tuple[str, Callable[[], None]]]] = None,
     ) -> None:
         self._base_tooltip = tooltip
-        self._icon_path = icon_path
-        self._menu_items = menu_items
+        self._connected_icon_path = icon_path
+        self._disconnected_icon_path = disconnected_icon_path
+        self._menu_items = menu_items or []
         self._hwnd: Optional[int] = None
         self._nid: Optional[NOTIFYICONDATA] = None
         self._running = False
@@ -630,6 +650,8 @@ class TrayIcon:
         self._status_connected: Optional[bool] = None
         self._tooltip = tooltip[:127]
         self._popup: Optional[_MenuPopup] = None
+        self._connected_hicon = None
+        self._disconnected_hicon = None
         # Keep a reference to the WNDPROC closure alive for the object's
         # lifetime – ctypes does not do this for you, and a garbage
         # collected callback means Windows calls into freed memory.
@@ -658,18 +680,25 @@ class TrayIcon:
 
     def update_status(self, connected: bool) -> None:
         """
-        Thread-safe: reflect controller connection state in the tray
+        Thread-safe?: reflect controller connection state in the tray
         tooltip and the status line at the top of the menu, which shows a
         small green/red dot (see _MenuPopup._on_paint) rather than a
         plain glyph.
         Safe to call before run() – the values are just cached until the
         icon actually exists.
         """
-        self._status_line = "Controller connected" if connected else "Controller not connected"
+        self._status_line = "Controller connected" if connected else "Controller disconnected"
         self._status_connected = connected
         state = "Connected" if connected else "Disconnected"
         self._tooltip = f"{self._base_tooltip} \u2013 {state}"[:127]
-        self._update_tooltip()
+
+        if self._hwnd:
+            user32.PostMessageW(
+                self._hwnd,
+                WM_UPDATE_ICON,
+                int(connected),
+                0,
+            )
 
     def update_menu_item(self, index: int, label: str) -> None:
         """
@@ -706,14 +735,32 @@ class TrayIcon:
             0, 0, 0, 0, 0, None, None, hinstance, None,
         )
 
-    def _load_icon(self) -> int:
-        if self._icon_path and self._icon_path.exists():
+    def _load_icon(self, path: Optional[pathlib.Path] = None) -> int:
+        icon_path = path or self._connected_icon_path
+
+        if icon_path == self._connected_icon_path:
+            if self._connected_hicon:
+                return self._connected_hicon
+
+        if icon_path == self._disconnected_icon_path:
+            if self._disconnected_hicon:
+                return self._disconnected_hicon
+
+        if icon_path and icon_path.exists():
             hicon = user32.LoadImageW(
-                None, str(self._icon_path), IMAGE_ICON, 0, 0,
+                None, str(icon_path), IMAGE_ICON, 0, 0,
                 LR_LOADFROMFILE | LR_DEFAULTSIZE,
             )
+
             if hicon:
+                if icon_path == self._connected_icon_path:
+                    self._connected_hicon = hicon
+
+                elif icon_path == self._disconnected_icon_path:
+                    self._disconnected_hicon = hicon
+
                 return hicon
+
         return user32.LoadIconW(None, ctypes.c_void_p(IDI_APPLICATION))
 
     def _add_icon(self) -> None:
@@ -723,7 +770,10 @@ class TrayIcon:
         nid.uID = 1
         nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP
         nid.uCallbackMessage = WM_TRAYICON
-        nid.hIcon = self._load_icon()
+        if self._status_connected is False and self._disconnected_icon_path:
+            nid.hIcon = self._load_icon(self._disconnected_icon_path)
+        else:
+            nid.hIcon = self._load_icon(self._connected_icon_path)
         nid.szTip = self._tooltip
         self._nid = nid
         shell32.Shell_NotifyIconW(NIM_ADD, ctypes.byref(nid))
@@ -742,6 +792,30 @@ class TrayIcon:
         nid.uFlags = NIF_TIP
         nid.szTip = self._tooltip
         shell32.Shell_NotifyIconW(NIM_MODIFY, ctypes.byref(nid))
+
+
+    def _update_icon(self, connected: bool) -> None:
+        if self._nid is None:
+            return
+
+        icon_path = (
+            self._connected_icon_path
+            if connected
+            else self._disconnected_icon_path
+        )
+
+        if icon_path and icon_path.exists():
+            hicon = user32.LoadImageW(None, str(icon_path), IMAGE_ICON, 
+                0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE,
+            )
+
+            if hicon:
+                self._nid.hIcon = hicon
+                self._nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP
+                shell32.Shell_NotifyIconW(
+                    NIM_MODIFY,
+                    ctypes.byref(self._nid),
+                )
 
     # ── Menu ──────────────────────────────────────────────────────────────
 
@@ -769,6 +843,24 @@ class TrayIcon:
 
     def _wndproc(self, hwnd, msg, wparam, lparam) -> int:
         try:
+            if msg == WM_UPDATE_ICON:
+                connected = bool(wparam)
+
+                self._status_line = (
+                    "Controller connected"
+                    if connected
+                    else "Controller disconnected"
+                )
+                self._status_connected = connected
+
+                state = "Connected" if connected else "Disconnected"
+                self._tooltip = f"{self._base_tooltip} – {state}"[:127]
+
+                self._update_tooltip()
+                self._update_icon(connected)
+
+                return 0
+
             if msg == WM_TRAYICON:
                 if lparam in (WM_LBUTTONUP, WM_RBUTTONUP):
                     self._show_menu()

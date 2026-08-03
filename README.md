@@ -48,12 +48,8 @@ Create a shortcut to VaderService.exe and place it in:
 
 ```
 pip install pyinstaller hid pillow
-python tools/generate_icons.py   # One-time: creates assets/icons/*.ico
 python build/build.py
 ````
-
-`build.py` will generate the icons automatically on the first run if you skip
-the manual step above.
 
 ## Change History
 

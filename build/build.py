@@ -29,7 +29,8 @@ DIST   = ROOT / "dist" / "VaderMapper"
 ASSETS = ROOT / "assets"
 CONFIG = ROOT / "config.json"
 
-SERVICE_ICON = ASSETS / "icons" / "service.ico"
+SERVICE_ICON = ASSETS / "icons" / "service_connected.ico"
+SERVICE_ICON_DISCONNECTED = ASSETS / "icons" / "service_disconnected.ico"
 CONFIG_ICON  = ASSETS / "icons" / "config.ico"
 
 # Stamped with the build version just before building, then restored -
@@ -96,15 +97,7 @@ def run(cmd: list[str]) -> None:
     result = subprocess.run(cmd, cwd=ROOT)
     if result.returncode != 0:
         sys.exit(result.returncode)
-
-
-def ensure_icons() -> None:
-    """Generate the .ico files on the fly if they're missing."""
-    if SERVICE_ICON.exists() and CONFIG_ICON.exists():
-        return
-    print("Icons missing - generating them now...")
-    run([sys.executable, str(ROOT / "tools" / "generate_icons.py")])
-    
+        
 
 def build_service() -> None:
     run(_base_args(
@@ -144,7 +137,6 @@ def main() -> None:
 
     original_version_file = _write_version_file(version)
     try:
-        ensure_icons()
         build_service()
         build_config_gui()
         copy_runtime_files()

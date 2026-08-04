@@ -1,25 +1,18 @@
 # Vader5Pro Remapper
 
 ## Current Tasks
-- [ ] Finish GUI remapping interface
-- [ ] Investigate and fix GUI lag
+- [ ] GUI Building in CustomTkinter
 
 ---
 
 ## TODO Tasks
 
 ### High Priority
-- [ ] Refine controller graphic
-- [ ] Add About page
-- [ ] Decide which settings belong in Settings page
+- [ ] 
 
 ### Medium Priority
-- [ ] Upload latest project to GitHub
-  - `main.py`
-  - `tray.py`
-  - `icon_connect.ico`
-  - `icon_disconnect.ico`
-- [ ] Move `ico_convert_bw.py` to local tools
+- [ ] Add About page
+- [ ] Decide which settings belong in Settings page
 
 ### Nice to Have
 - [ ] Decode battery status
@@ -38,17 +31,13 @@
 
 ## Last Session
 
-**2026-07-30**
+**2026-08-04**
 
 ### Completed
-- Debug logging for `service/main.py`
-- Finished tray icon connect/disconnect status
-- Finalized tray context menu and fixed related bugs
+- WORKING SERVICE Version 0.1_alpha
 
 ### Next Session
-- Start with GUI lag investigation.
-- Continue remapping interface.
-- Commit and upload latest changes.
+- See Current Tasks
 
 ---
 

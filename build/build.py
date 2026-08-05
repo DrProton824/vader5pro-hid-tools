@@ -68,7 +68,7 @@ def package_release(version: str) -> Path:
     archive_path = shutil.make_archive(str(archive_base), "zip", root_dir=DIST)
     return Path(archive_path)
 
-def _base_args(name: str, entry: Path, icon: Path | None = None) -> list[str]:
+def _base_args(name: str, entry: Path, icon: Path | None = None, extra: list[str] | None = None) -> list[str]:
     """PyInstaller flags shared by both executables."""
     args = [
         sys.executable, "-m", "PyInstaller",
@@ -88,6 +88,8 @@ def _base_args(name: str, entry: Path, icon: Path | None = None) -> list[str]:
         print(f"  (icon not found at {icon} - run tools/generate_icons.py first "
               f"for a custom icon; building with the default one for now)")
 
+    if extra:
+        args += extra
     args.append(str(entry))
     return args
 
@@ -112,6 +114,7 @@ def build_config_gui() -> None:
         "VaderConfig",
         ROOT / "src" / "config_gui" / "main.py",
         CONFIG_ICON,
+        extra=["--collect-all", "customtkinter"],
     ))
 
 

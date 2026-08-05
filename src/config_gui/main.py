@@ -19,6 +19,7 @@ def _bootstrap_path() -> pathlib.Path:
 _ROOT = _bootstrap_path()
 sys.path.insert(0, str(_ROOT))
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent / "src" / "config_gui"))
 os.chdir(_ROOT)  # relative 'assets/images/...' paths resolve regardless of launch cwd
 
 from ctkmaker_compat import patch as _patch_ctkmaker

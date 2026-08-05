@@ -47,7 +47,7 @@ Create a shortcut to VaderService.exe and place it in:
 ## Building from source
 
 ```
-pip install pyinstaller hid pillow
+pip install pyinstaller hid pillow customtkinter
 python build/build.py
 ````
 

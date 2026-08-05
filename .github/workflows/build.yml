@@ -29,7 +29,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pyinstaller hidapi Pillow customtkinter ctkmaker
+          pip install pyinstaller hidapi customtkinter
       - name: Build executables
         env:
           BUILD_VERSION: ${{ inputs.version }}

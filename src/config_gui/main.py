@@ -24,9 +24,9 @@ os.chdir(_ROOT)  # relative 'assets/images/...' paths resolve regardless of laun
 from src.config_gui.ctkmaker_compat import patch as _patch_ctkmaker
 _patch_ctkmaker()
 
-from scrollable_dropdown import ScrollableDropdown
+from src.config_gui.scrollable_dropdown import ScrollableDropdown
 from pathlib import Path
-from scripts.navigation import NavigationController
+from src.config_gui.scripts.navigation import NavigationController
 
 from src.shared import single_instance
 

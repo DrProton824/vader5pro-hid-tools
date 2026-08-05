@@ -3166,8 +3166,27 @@ class Vader5mapper(ctk.CTk):
         self.nav_connection.bind("<Configure>", lambda _e, _c=self.nav_connection: ctk.balance_pack(_c, 'height'))
 
 
+def main() -> None:
+    if not single_instance.acquire(MUTEX_NAME):
+        try:
+            ctypes.windll.user32.MessageBoxW(
+                None,
+                "Vader Remapper Config is already open.",
+                "Vader Remapper",
+                0x00000040,
+            )
+        except Exception:
+            pass
+        return
 
-if __name__ == "__main__":
-    ctk.set_appearance_mode("dark")
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(1)
+    except Exception:
+        pass
+
     app = Vader5mapper()
     app.mainloop()
+
+
+if __name__ == "__main__":
+    main()

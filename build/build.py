@@ -4,10 +4,6 @@ Build both executables with PyInstaller.
 Run from the repo root:
     python build/build.py
 
-If assets/icons/*.ico don't exist yet, generate them first:
-    pip install pillow
-    python tools/generate_icons.py
-
 Outputs land in  dist/VaderMapper/
   VaderService.exe   – no console window, no UAC elevation, custom icon
   VaderConfig.exe    – windowed GUI, custom icon

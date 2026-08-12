@@ -59,47 +59,49 @@ Observed:
 The `0xEF` response is present even with no controller connected.  
 **The `0xEF` packet alone cannot be used to confirm controller presence.**
 
+# AFTER
+
 ## Capdata observations (0x81)
 
-No 20-byte `0x81` capdata packets were observed in the 20-second baseline.
+No 20-byte `0x81` capdata packets were observed in baseline measurements.
 
-In the 30-second baseline, a single stray byte (`0x08`) appeared on `0x81` at
-t≈30.34s during the re-enumeration burst. This does not match the 20-byte
-capdata packets observed during connection sequences and is likely a USBPcap
-artefact or unrelated control response.
+A single stray byte (`0x08`) appeared on `0x81` during idle monitoring.
+This does not match the 20-byte capdata packets observed during connection
+sequences and is likely a USBPcap artefact or unrelated control response.
 
 **Confirmed:** `0x81` capdata only appears during and immediately after the
 connection initialization sequence.
 
-### Re-enumeration after ~30-45 seconds
+### Device behavior after ~30 minutes without controller
 
-When the dongle remains without a connected controller for approximately 30-45 seconds,
+When the dongle remains without a connected controller for approximately 30 minutes,
 the device performs a USB re-enumeration event (GET_DESCRIPTOR requests on endpoint `0x80`).
 
-**Before re-enumeration (t=0-30s):**
+**Initial phase (first ~30 minutes):**
 
 - OUT `0x01` polling requests: continuous (~0.5s cadence)
 - IN `0xEF` responses: continuous
 
-**During re-enumeration (t≈30-44s):**
+**During re-enumeration event:**
 
-- Re-enumeration burst on `0x80`
-- Last OUT poll: frame 271 at t=43.2s
-- Last IN response: frame 289 at t=43.8s (after re-enum completes)
+- Re-enumeration burst on `0x80` (GET_DESCRIPTOR requests)
+- OUT `0x01` polling stops
+- Interface enumeration changes
 
-**After re-enumeration (t>44s onwards):**
+**After re-enumeration:**
 
 - OUT `0x01` polling requests **stop permanently**
-- ONLY `0xEF` IN packets continue, exactly **1 per second**
+- ONLY `0xEF` IN packets continue, approximately **1 per second**
 - This traffic pattern becomes **identical** to controller-connected idle state
-- Pattern persists indefinitely (confirmed through 60-second capture)
+- Pattern persists indefinitely (confirmed through extended capture)
 
-**Critical implication:** After ~30-45 seconds idle, dongle-only and controller-connected
-traffic become **completely indistinguishable**. The OUT `0x01` polling pattern cannot be
-used as a reliable connection detector after the initial connection window.
+**Critical implication:** After the re-enumeration event, dongle-only and 
+controller-connected traffic become **completely indistinguishable**. The OUT `0x01` 
+polling pattern cannot be used as a reliable connection detector beyond the initial 
+phase.
 
-**Windows behavior:** The Windows USB disconnect sound occurs as the re-enumeration completes,
-marking the removal of the HID interfaces from the system.
+**Windows behavior:** A USB disconnect sound is heard when the re-enumeration completes,
+indicating the removal of the HID interfaces from the system.
 
 ---
 

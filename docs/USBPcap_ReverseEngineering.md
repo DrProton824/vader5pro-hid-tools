@@ -88,9 +88,9 @@ polling pattern cannot be used as a reliable connection detector beyond the init
 
 ---
 
-# Baseline Traffic (Controller Connected)
+# Baseline Traffic (Controller Connected, Idle, Without TurnOn/Connect Sequence)
 
-Captured with dongle plugged in, controller ON (without the initial connection sequence).
+Captured with dongle plugged in, controller ON and Connected and Idling (no TurnOn/Connect included).
 
 Observed:
 

@@ -71,21 +71,35 @@ artefact or unrelated control response.
 **Confirmed:** `0x81` capdata only appears during and immediately after the
 connection initialization sequence.
 
-## Re-enumeration after ~30 seconds
+### Re-enumeration after ~30-45 seconds
 
-After approximately 30 seconds with no controller connected, the dongle performs
-a USB re-enumeration event (GET_DESCRIPTOR requests on endpoint `0x80`).
+When the dongle remains without a connected controller for approximately 30-45 seconds,
+the device performs a USB re-enumeration event (GET_DESCRIPTOR requests on endpoint `0x80`).
 
-Following the re-enumeration:
+**Before re-enumeration (t=0-30s):**
 
-- The OUT `0x01` polling requests **stop completely**
-- The dongle emits only passive `0xEF` IN packets at ~1-second intervals
-- This traffic pattern becomes **identical** to the controller-connected idle state
+- OUT `0x01` polling requests: continuous (~0.5s cadence)
+- IN `0xEF` responses: continuous
 
-**Critical implication:** After 30 seconds, dongle-only and controller-connected
-traffic are **indistinguishable** based on `0xEF` packets alone. The absence of
-OUT `0x01` polling is not a reliable controller-presence indicator after the
-initial 30-second window.
+**During re-enumeration (t≈30-44s):**
+
+- Re-enumeration burst on `0x80`
+- Last OUT poll: frame 271 at t=43.2s
+- Last IN response: frame 289 at t=43.8s (after re-enum completes)
+
+**After re-enumeration (t>44s onwards):**
+
+- OUT `0x01` polling requests **stop permanently**
+- ONLY `0xEF` IN packets continue, exactly **1 per second**
+- This traffic pattern becomes **identical** to controller-connected idle state
+- Pattern persists indefinitely (confirmed through 60-second capture)
+
+**Critical implication:** After ~30-45 seconds idle, dongle-only and controller-connected
+traffic become **completely indistinguishable**. The OUT `0x01` polling pattern cannot be
+used as a reliable connection detector after the initial connection window.
+
+**Windows behavior:** The Windows USB disconnect sound occurs as the re-enumeration completes,
+marking the removal of the HID interfaces from the system.
 
 ---
 

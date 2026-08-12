@@ -59,8 +59,6 @@ Observed:
 The `0xEF` response is present even with no controller connected.  
 **The `0xEF` packet alone cannot be used to confirm controller presence.**
 
-# AFTER
-
 ## Capdata observations (0x81)
 
 No 20-byte `0x81` capdata packets were observed in baseline measurements.

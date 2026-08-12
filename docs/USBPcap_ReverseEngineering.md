@@ -61,25 +61,17 @@ The `0xEF` response is present even with no controller connected.
 
 ## Capdata observations (0x81)
 
-No 20-byte `0x81` capdata packets were observed in baseline measurements.
-The `0x81` capdata only appears during and immediately after the
-connection initialization sequence.
+`0x81` capdata only appears during and immediately after the connection initialization sequence.
 
-### Device behavior after ~30 minutes without controller
+### Device behavior after ~30-45 seconds idle
 
-When the dongle remains without a connected controller for approximately 30 minutes,
+When the dongle remains without a connected controller for approximately 30-45 seconds,
 the device performs a USB re-enumeration event (GET_DESCRIPTOR requests on endpoint `0x80`).
 
-**Initial phase (first ~30 minutes):**
+**Before re-enumeration:**
 
 - OUT `0x01` polling requests: continuous (~0.5s cadence)
 - IN `0xEF` responses: continuous
-
-**During re-enumeration event:**
-
-- Re-enumeration burst on `0x80` (GET_DESCRIPTOR requests)
-- OUT `0x01` polling stops
-- Interface enumeration changes
 
 **After re-enumeration:**
 
@@ -90,11 +82,9 @@ the device performs a USB re-enumeration event (GET_DESCRIPTOR requests on endpo
 
 **Critical implication:** After the re-enumeration event, dongle-only and 
 controller-connected traffic become **completely indistinguishable**. The OUT `0x01` 
-polling pattern cannot be used as a reliable connection detector beyond the initial 
-phase.
+polling pattern cannot be used as a reliable connection detector beyond the initial phase.
 
-**Windows behavior:** A USB disconnect sound is heard when the re-enumeration completes,
-indicating the removal of the HID interfaces from the system.
+**Windows behavior:** A USB disconnect sound is heard when the re-enumeration completes.
 
 ---
 

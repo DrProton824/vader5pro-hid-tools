@@ -59,6 +59,34 @@ Observed:
 The `0xEF` response is present even with no controller connected.  
 **The `0xEF` packet alone cannot be used to confirm controller presence.**
 
+## Capdata observations (0x81)
+
+No 20-byte `0x81` capdata packets were observed in the 20-second baseline.
+
+In the 30-second baseline, a single stray byte (`0x08`) appeared on `0x81` at
+t≈30.34s during the re-enumeration burst. This does not match the 20-byte
+capdata packets observed during connection sequences and is likely a USBPcap
+artefact or unrelated control response.
+
+**Confirmed:** `0x81` capdata only appears during and immediately after the
+connection initialization sequence.
+
+## Re-enumeration after ~30 seconds
+
+After approximately 30 seconds with no controller connected, the dongle performs
+a USB re-enumeration event (GET_DESCRIPTOR requests on endpoint `0x80`).
+
+Following the re-enumeration:
+
+- The OUT `0x01` polling requests **stop completely**
+- The dongle emits only passive `0xEF` IN packets at ~1-second intervals
+- This traffic pattern becomes **identical** to the controller-connected idle state
+
+**Critical implication:** After 30 seconds, dongle-only and controller-connected
+traffic are **indistinguishable** based on `0xEF` packets alone. The absence of
+OUT `0x01` polling is not a reliable controller-presence indicator after the
+initial 30-second window.
+
 ---
 
 # Baseline Traffic (Controller Connected, No Initialization)

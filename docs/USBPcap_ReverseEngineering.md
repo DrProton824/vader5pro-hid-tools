@@ -62,12 +62,7 @@ The `0xEF` response is present even with no controller connected.
 ## Capdata observations (0x81)
 
 No 20-byte `0x81` capdata packets were observed in baseline measurements.
-
-A single stray byte (`0x08`) appeared on `0x81` during idle monitoring.
-This does not match the 20-byte capdata packets observed during connection
-sequences and is likely a USBPcap artefact or unrelated control response.
-
-**Confirmed:** `0x81` capdata only appears during and immediately after the
+The `0x81` capdata only appears during and immediately after the
 connection initialization sequence.
 
 ### Device behavior after ~30 minutes without controller

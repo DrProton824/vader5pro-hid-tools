@@ -29,7 +29,7 @@ Two data sources were captured per session:
 
 ---
 
-# Baseline Traffic (No Controller Connected)
+# Baseline Traffic (Dongle Connected, Controller Disconnected)
 
 Captured with dongle plugged in, controller OFF.
 

@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <svg
-   viewBox="0 0 1280 720"
+   viewBox="0 0 1280 660"
    version="1.1"
    id="svg1"
    sodipodi:docname="controller_new_inkscape_resized.svg"
    inkscape:version="1.4.4 (dcaf3e7, 2026-05-05)"
    inkscape:export-filename="controller_new_inkscape_500.png"
-   inkscape:export-xdpi="74.685974"
-   inkscape:export-ydpi="74.685974"
+   inkscape:export-xdpi="72.727272"
+   inkscape:export-ydpi="72.727272"
    width="1280"
-   height="720"
+   height="660"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:xlink="http://www.w3.org/1999/xlink"
@@ -565,18 +565,19 @@
      inkscape:pagecheckerboard="true"
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="0.70710678"
-     inkscape:cx="608.81894"
+     inkscape:cx="609.52605"
      inkscape:cy="406.5864"
      inkscape:window-width="1920"
      inkscape:window-height="968"
      inkscape:window-x="-11"
      inkscape:window-y="-11"
      inkscape:window-maximized="1"
-     inkscape:current-layer="g254" />
+     inkscape:current-layer="svg1" />
   <g
      id="g254"
      inkscape:label="ASSIGNED"
-     style="display:inline">
+     style="display:inline"
+     transform="matrix(0.8982684,0,0,0.8982684,65.253073,-2.222428)">
     <g
        id="g311"
        inkscape:label="DESIGN"

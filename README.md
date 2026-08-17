@@ -7,15 +7,16 @@ that Windows applications cannot access through normal XInput mode.
 ## What it should do
 
 Maps the vendor-specific buttons (M1–M4, LM/RM, C/Z, Home, Select/Start, Share/Fn) to any desired
-keyboard shortcut. The standard gamepad buttons (A/B/X/Y, bumpers, triggers, sticks, D-pad) are not
-the main target but may be remappable in the future.
+keyboard shortcut. The standard gamepad buttons (A/B/X/Y, bumpers, triggers, sticks, D-pad) can be
+mapped but will not overwrite the default functions of those keys!
 
 
 ## What it does NOT do
 
-Replace the Flydigi SpaceStation software. The primary goal is to extend the capabilities of the
-Flydigi software by allowing buttons to be mapped to full key combinations. Other functions
-(LEDs, controller settings, etc.) are not the target.
+Replace all functions of the Flydigi SpaceStation software. The primary goal is to extend the capabilities of the
+Flydigi software by allowing buttons to be mapped to full key combinations or macros. Other functions
+(LEDs, controller settings, firmware updates etc.) are not the target. The tool, however, can be used without having
+the Flydigi SpaceStation software being installed or its service running.
 
 
 ## Usage
@@ -29,10 +30,9 @@ Flydigi software by allowing buttons to be mapped to full key combinations. Othe
 
 ## Portability
 
-Everything lives in one folder. Deleting it completely removes the application.
-Nothing is written to AppData, the registry, or anywhere else. A shortcut can be
-added to the Startup folder to start the application automatically after each reboot.
-The application is lightweight and should have only minimal performance impact.
+Everything lives in one folder. Nothing is written to AppData, the registry, or anywhere else.
+A shortcut can be added to the Startup folder to start the application automatically after each reboot.
+The service application is lightweight and is written to have only minimal performance impact.
 
 
 ## Optional: Start with Windows

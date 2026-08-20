@@ -166,7 +166,7 @@ def main() -> None:
             else:
                 # Running from source – fall back to launching the module.
                 subprocess.Popen(
-                    [sys.executable, "-m", "src.config_gui.main"],
+                    [sys.executable, "MainPage.py"],
                     cwd=str(_ROOT),
                 )
         except Exception:

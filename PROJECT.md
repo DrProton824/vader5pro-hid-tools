@@ -1,7 +1,7 @@
 # Vader5Pro Remapper
 
 ## Current Tasks
-- [ ] GUI Building in CustomTkinter
+- [ ] New GUI Integration
 
 ---
 
@@ -11,12 +11,12 @@
 - [ ] 
 
 ### Medium Priority
-- [ ] Add About page
-- [ ] Decide which settings belong in Settings page
+- [ ] 
+- [ ] 
 
 ### Nice to Have
-- [ ] Decode battery status
-- [ ] Add battery icon to GUI
+- [~] Decode battery status
+- [X] Add battery icon to GUI
 - [ ] Rumble intensity setting
 - [ ] Rumble test button
 - [ ] Investigate temporary LED color/blink support
@@ -25,15 +25,16 @@
 
 ## Open Issues
 
-- **GUI:** Noticeable lag while interacting with the interface.
+- no notable issues found in current version
 
 ---
 
 ## Last Session
 
-**2026-08-04**
+**2026-08-21**
 
 ### Completed
+- GUI Building in CustomTkinter finished
 - WORKING SERVICE Version 0.1_alpha
 
 ### Next Session

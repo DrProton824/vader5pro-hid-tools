@@ -64,22 +64,22 @@ STOP_COMMAND: tuple[int, ...] = (0x5A, 0xA5, 0x11, 0x07, 0xFF, 0x00, 0xFF, 0xFF,
 BUTTON_BITS: dict[int, dict[int, str]] = {
     11: {
         0x80: "X",
-        0x40: "Select",
+        0x40: "SELECT",
         0x20: "B",
         0x10: "A",
-        0x08: "DPad Left",
-        0x04: "DPad Down",
-        0x02: "DPad Right",
-        0x01: "DPad Up",
+        0x08: "LEFT",
+        0x04: "DOWN",
+        0x02: "RIGHT",
+        0x01: "UP",
     },
     12: {
-        0x80: "STICK-R",
-        0x40: "STICK-L",
+        0x80: "RS",
+        0x40: "LS",
         0x20: "RT",
         0x10: "LT",
         0x08: "RB",
         0x04: "LB",
-        0x02: "Start",
+        0x02: "START",
         0x01: "Y",
     },
     13: {
@@ -93,7 +93,7 @@ BUTTON_BITS: dict[int, dict[int, str]] = {
         0x01: "C",
     },
     14: {
-        0x08: "Home",
+        0x08: "HOME",
         0x02: "Arrow",
         0x01: "Circle",
     },
@@ -121,18 +121,18 @@ MAPPABLE_BUTTONS: tuple[str, ...] = (
     # Face buttons
     "A", "B", "X", "Y",
     # D-Pad
-    "DPad Up", "DPad Down", "DPad Left", "DPad Right",
+    "UP", "DOWN", "LEFT", "RIGHT",
     # Shoulder
     "LB", "RB", "LT", "RT",
     # Sticks (click)
-    "STICK-L", "STICK-R",
+    "LS", "RS",
     # Select / Start
-    "Select", "Start",
+    "SELECT", "START",
     # Macro / extra buttons (original v1 set)
     "M1", "M2", "M3", "M4",
     "LM", "RM",
     "C",  "Z",
-    "Home", "Arrow", "Circle",
+    "HOME", "Arrow", "Circle",
 )
 
 # How long (seconds) a button's raw HID bit must hold its new state

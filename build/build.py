@@ -108,7 +108,7 @@ def build_service() -> None:
 def build_config_gui() -> None:
     run(_base_args(
         "VaderConfig",
-        ROOT / "src" / "config_gui" / "main.py",
+        ROOT / "MainPage.py",
         CONFIG_ICON,
         extra=["--collect-all", "customtkinter"],
     ))

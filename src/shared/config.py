@@ -1,14 +1,16 @@
 """
 Config file read / write.
 
-Deliberately simple:
-  - One JSON file next to the executables.
-  - No schema versioning in v1 (add it when the schema actually changes).
-  - Atomic write (write to .tmp, rename) so a crash never corrupts the file.
-  - Thread-safe for the single writer (VaderConfig) / single reader (VaderService).
+Schema: {"active_profile": "<id>", "profiles": [...], "macros": [...], "settings": {...}}.
+Each profile is {"id", "name", "mapping": {button: {"type": "keybind"|"macro", "value": "..."}}, "automation", "hotkey"}.
 
-The service detects changes via mtime polling rather than inotify/ReadDirectoryChangesW
-so the implementation stays identical on every Python runtime without extra deps.
+load()/load_settings() stay flat-shaped for VaderService.exe: they resolve the active
+profile and, for load(), project only its keybind-type assignments into the old
+{button: shortcut} dict — macro assignments aren't playable by the service yet.
+
+Atomic write (write to .tmp, rename) so a crash never corrupts the file. The service
+detects changes via mtime polling rather than inotify/ReadDirectoryChangesW so the
+implementation stays identical on every Python runtime without extra deps.
 """
 
 from __future__ import annotations
@@ -18,95 +20,57 @@ import os
 import pathlib
 import sys
 import tempfile
-from typing import Optional
+import uuid
+from typing import Any, Optional
 
 from .constants import MAPPABLE_BUTTONS
 
-# ── Location ──────────────────────────────────────────────────────────────────
+
 def _find_config_path() -> pathlib.Path:
-    """
-    Locate config.json next to the exe (bundled) or at repo root (source).
-    """
     if getattr(sys, "frozen", False):
-        # Bundled exe: config.json sits in the same folder as the exe
         return pathlib.Path(sys.executable).resolve().parent / "config.json"
     else:
-        # Source: config.json is at the repo root, two levels above shared/
         return pathlib.Path(__file__).resolve().parents[2] / "config.json"
 
 
 CONFIG_PATH = _find_config_path()
 
-# ── Types ─────────────────────────────────────────────────────────────────────
-# A mapping is just  { button_name: shortcut_string }
-# e.g. { "M1": "f13", "M2": "ctrl+shift+p" }
 Mapping = dict[str, str]
 Settings = dict[str, object]
+ConfigData = dict[str, Any]
 
-# Reserved top-level key for app settings unrelated to button mapping.
-# Button names are always plain strings from MAPPABLE_BUTTONS, so this
-# can never collide with a real button key.
-SETTINGS_KEY = "_settings"
+DEFAULT_PROFILE_ID = "default"
+
+DEFAULT_PROFILE: ConfigData = {
+    "id": DEFAULT_PROFILE_ID,
+    "name": "Default",
+    "mapping": {
+        "M1": {"type": "keybind", "value": "f13"},
+        "M2": {"type": "keybind", "value": "f14"},
+        "M3": {"type": "keybind", "value": "f15"},
+        "M4": {"type": "keybind", "value": "f16"},
+        "LM": {"type": "keybind", "value": "f17"},
+        "RM": {"type": "keybind", "value": "f18"},
+    },
+    "automation": {"enabled": False, "exe": ""},
+    "hotkey": "",
+}
 
 DEFAULT_SETTINGS: Settings = {
-    # Sends the recovered vendor initialization/stop command sequence
-    # before/after reading the HID interface. Confirmed necessary on
-    # Vader 5 Pro profiles that have no macro/extra button currently
-    # assigned in the Flydigi software — without it the vendor (0xFFA0)
-    # interface stays silent.
     "vendor_initialization": True,
+    "autostart": False,
+    "close_to_tray": True,
 }
 
-# ── Defaults ──────────────────────────────────────────────────────────────────
-# Shipped in the repo so a first run works without opening the GUI.
-DEFAULT_MAPPING: Mapping = {
-    # Standard XInput buttons – unmapped by default (see the warning in
-    # constants.py about double input before assigning these).
-    "A": "", "B": "", "X": "", "Y": "",
-    "DPad Up": "", "DPad Down": "", "DPad Left": "", "DPad Right": "",
-    "LB": "", "RB": "", "LT": "", "RT": "",
-    "STICK-L": "", "STICK-R": "",
-    "Select": "", "Start": "",
-
-    # Original v1 extras – keep their existing defaults.
-    "M1":     "f13",
-    "M2":     "f14",
-    "M3":     "f15",
-    "M4":     "f16",
-    "LM":     "f17",
-    "RM":     "f18",
-    "C":      "",
-    "Z":      "",
-    "Home":   "",
-    "Arrow":  "",
-    "Circle": "",
+DEFAULT_CONFIG: ConfigData = {
+    "active_profile": DEFAULT_PROFILE_ID,
+    "profiles": [DEFAULT_PROFILE],
+    "macros": [],
+    "settings": DEFAULT_SETTINGS,
 }
 
 
-def load() -> Mapping:
-    """
-    Return the current mapping from disk.
-
-    Returns the default mapping if the file is missing or corrupt.
-    Never raises – the service must keep running even with a bad config.
-    """
-    try:
-        text = CONFIG_PATH.read_text(encoding="utf-8")
-        raw: dict = json.loads(text)
-    except FileNotFoundError:
-        return dict(DEFAULT_MAPPING)
-    except (json.JSONDecodeError, OSError):
-        # Corrupt or locked file – return defaults rather than crashing.
-        return dict(DEFAULT_MAPPING)
-
-    # Keep only keys we recognise; ignore unknown keys from future versions.
-    mapping: Mapping = {}
-    for button in MAPPABLE_BUTTONS:
-        mapping[button] = str(raw.get(button, ""))
-    return mapping
-
-
-def _read_raw() -> dict:
+def _read_raw() -> ConfigData:
     try:
         return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError, OSError):
@@ -114,13 +78,12 @@ def _read_raw() -> dict:
 
 
 def _atomic_write(text: str) -> None:
-    """Write text to CONFIG_PATH atomically (temp file + rename)."""
     dir_ = CONFIG_PATH.parent
     fd, tmp_path = tempfile.mkstemp(dir=dir_, suffix=".tmp", text=True)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(text)
-        os.replace(tmp_path, CONFIG_PATH)  # atomic on Windows (same volume)
+        os.replace(tmp_path, CONFIG_PATH)
     except Exception:
         try:
             os.unlink(tmp_path)
@@ -129,49 +92,101 @@ def _atomic_write(text: str) -> None:
         raise
 
 
-def save(mapping: Mapping) -> None:
+def _migrate(data: ConfigData) -> bool:
     """
-    Write mapping to disk atomically.
-
-    Preserves any existing ``_settings`` block – this used to rewrite the
-    file with only button keys, which silently dropped settings on every
-    autosave triggered from the config GUI.
+    Backfill profile ids, guarantee a Default profile, repair a dangling
+    active_profile, and fold a pre-migration flat {"M1": "f13", ...}
+    config into a fresh Default profile. Returns True if data changed.
     """
-    for button in mapping:
-        if button not in MAPPABLE_BUTTONS:
-            raise ValueError(f"Unknown button: {button!r}")
+    changed = False
 
-    existing_raw = _read_raw()
-    data = {btn: mapping.get(btn, "") for btn in MAPPABLE_BUTTONS}
-    if SETTINGS_KEY in existing_raw:
-        data[SETTINGS_KEY] = existing_raw[SETTINGS_KEY]
+    if "profiles" not in data:
+        legacy_mapping = {
+            key: value for key, value in data.items()
+            if key in MAPPABLE_BUTTONS and isinstance(value, str)
+        }
+        if legacy_mapping:
+            profile = json.loads(json.dumps(DEFAULT_PROFILE))
+            profile["mapping"] = {
+                button: {"type": "keybind", "value": shortcut}
+                for button, shortcut in legacy_mapping.items() if shortcut
+            }
+            data["profiles"] = [profile]
+            for key in legacy_mapping:
+                data.pop(key, None)
+            changed = True
 
+    profiles = data.setdefault("profiles", [])
+
+    for profile in profiles:
+        if "id" not in profile:
+            profile["id"] = DEFAULT_PROFILE_ID if profile.get("name") == "Default" else uuid.uuid4().hex
+            changed = True
+
+    if not any(p["id"] == DEFAULT_PROFILE_ID for p in profiles):
+        profiles.insert(0, json.loads(json.dumps(DEFAULT_PROFILE)))
+        changed = True
+
+    active = data.get("active_profile")
+    if not any(p["id"] == active for p in profiles):
+        by_name = next((p for p in profiles if p.get("name") == active), None)
+        data["active_profile"] = by_name["id"] if by_name else DEFAULT_PROFILE_ID
+        changed = True
+
+    data.setdefault("macros", [])
+    settings = dict(DEFAULT_SETTINGS)
+    settings.update(data.get("settings", {}))
+    if data.get("settings") != settings:
+        changed = True
+    data["settings"] = settings
+
+    return changed
+
+
+def load_config() -> ConfigData:
+    """Return the full config, migrating a legacy/incomplete file on read."""
+    data = _read_raw()
+    if not data:
+        return json.loads(json.dumps(DEFAULT_CONFIG))
+    if _migrate(data):
+        save_config(data)
+    return data
+
+
+def save_config(data: ConfigData) -> None:
     _atomic_write(json.dumps(data, indent=2))
+
+
+def load() -> Mapping:
+    """
+    Return the active profile's mapping as a flat {button: shortcut} dict.
+    Macro-type assignments resolve to "" (unmapped) — the service can only
+    play keybind shortcuts today. Never raises.
+    """
+    try:
+        data = load_config()
+    except Exception:
+        return {button: "" for button in MAPPABLE_BUTTONS}
+
+    active_id = data.get("active_profile", DEFAULT_PROFILE_ID)
+    profile = next((p for p in data.get("profiles", []) if p["id"] == active_id), None)
+    raw_mapping = (profile or {}).get("mapping", {})
+
+    mapping: Mapping = {}
+    for button in MAPPABLE_BUTTONS:
+        assignment = raw_mapping.get(button)
+        if isinstance(assignment, dict) and assignment.get("type") == "keybind":
+            mapping[button] = str(assignment.get("value", ""))
+        else:
+            mapping[button] = ""  # unmapped, or a macro — see MacroPlayer follow-up
+    return mapping
 
 
 def load_settings() -> Settings:
-    """Return current settings, falling back to defaults for missing keys."""
-    raw = _read_raw()
-    stored = raw.get(SETTINGS_KEY, {})
-    settings = dict(DEFAULT_SETTINGS)
-    if isinstance(stored, dict):
-        settings.update(stored)
-    return settings
-
-
-def save_settings(settings: Settings) -> None:
-    """Write settings atomically, preserving the current button mapping."""
-    existing_raw = _read_raw()
-    data = {
-        btn: existing_raw.get(btn, DEFAULT_MAPPING.get(btn, ""))
-        for btn in MAPPABLE_BUTTONS
-    }
-    merged = dict(DEFAULT_SETTINGS)
-    merged.update(existing_raw.get(SETTINGS_KEY, {}))
-    merged.update(settings)
-    data[SETTINGS_KEY] = merged
-
-    _atomic_write(json.dumps(data, indent=2))
+    try:
+        return dict(load_config().get("settings", DEFAULT_SETTINGS))
+    except Exception:
+        return dict(DEFAULT_SETTINGS)
 
 
 class ConfigWatcher:
@@ -193,7 +208,6 @@ class ConfigWatcher:
             return None
 
     def changed(self) -> bool:
-        """Return True once when the file has been modified since last check."""
         current = self._mtime()
         if current != self._last_mtime:
             self._last_mtime = current

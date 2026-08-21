@@ -31,7 +31,7 @@ CONFIG_ICON  = ASSETS / "icons" / "config.ico"
 
 # Stamped with the build version just before building, then restored -
 # see _write_version_file / _restore_version_file below.
-VERSION_FILE = ROOT / "src" / "shared" / "version.py"
+VERSION_FILE = ROOT / "service" / "version.py"
 
 
 def _get_version() -> str:
@@ -75,7 +75,7 @@ def _base_args(name: str, entry: Path, icon: Path | None = None, extra: list[str
         "--workpath", str(ROOT / "build" / "work" / name),
         "--specpath", str(ROOT / "build"),
         "--collect-all", "hid",
-        "--exclude-module", "src.shared.legacy_hid_reader",
+        "--exclude-module", "service.hid.legacy_hid_reader",
     ]
 
     if icon and icon.exists():
@@ -100,7 +100,7 @@ def run(cmd: list[str]) -> None:
 def build_service() -> None:
     run(_base_args(
         "VaderService",
-        ROOT / "src" / "service" / "main.py",
+        ROOT / "service" / "main.py",
         SERVICE_ICON,
     ))
 

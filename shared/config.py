@@ -23,14 +23,23 @@ import tempfile
 import uuid
 from typing import Any, Optional
 
-from .constants import MAPPABLE_BUTTONS
-
+MAPPABLE_BUTTONS: tuple[str, ...] = (
+    "A", "B", "X", "Y",
+    "UP", "DOWN", "LEFT", "RIGHT",
+    "LB", "RB", "LT", "RT",
+    "LS", "RS",
+    "SELECT", "START",
+    "M1", "M2", "M3", "M4",
+    "LM", "RM",
+    "C",  "Z",
+    "HOME", "Arrow", "Circle",
+)
 
 def _find_config_path() -> pathlib.Path:
     if getattr(sys, "frozen", False):
         return pathlib.Path(sys.executable).resolve().parent / "config.json"
     else:
-        return pathlib.Path(__file__).resolve().parents[2] / "config.json"
+        return pathlib.Path(__file__).resolve().parents[1] / "config.json"
 
 
 CONFIG_PATH = _find_config_path()

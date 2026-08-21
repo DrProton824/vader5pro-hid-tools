@@ -51,7 +51,7 @@ except Exception:
 def _bootstrap_path() -> pathlib.Path:
     """
     Return the root directory whether we are:
-      - Running from source:  vader-remapper/src/service/main.py
+      - Running from source:  vader-remapper/service/main.py
       - Running as a PyInstaller onefile exe:  VaderMapper/VaderService.exe
 
     In the bundled case sys._MEIPASS is the temp folder where PyInstaller
@@ -61,20 +61,20 @@ def _bootstrap_path() -> pathlib.Path:
         # Bundled exe: root = directory containing the exe
         return pathlib.Path(sys.executable).resolve().parent
     else:
-        # Source: root = three levels up from this file
-        return pathlib.Path(__file__).resolve().parents[2]
+        # Source: root = two levels up from this file
+        return pathlib.Path(__file__).resolve().parents[1]
 
 
 _ROOT = _bootstrap_path()
 sys.path.insert(0, str(_ROOT))
 
-from src.shared import config as cfg
-from src.shared import single_instance
-from src.shared.config import ConfigWatcher
-from src.shared.rawinput_reader import RawInputReaderThread
-from src.shared.input_sender import InputSender
-from src.shared.mapper import ButtonMapper
-from src.shared.tray import TrayIcon
+from shared import config as cfg
+from service import single_instance
+from shared.config import ConfigWatcher
+from service.hid.rawinput_reader import RawInputReaderThread
+from service.mapping.input_sender import InputSender
+from service.mapping.mapper import ButtonMapper
+from service.tray import TrayIcon
 
 # How often the config-watcher thread wakes to check for changes.
 # 500 ms is imperceptible to users but costs essentially nothing.

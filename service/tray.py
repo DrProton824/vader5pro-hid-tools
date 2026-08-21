@@ -76,6 +76,8 @@ def _log_path() -> pathlib.Path:
 
 
 def _log(message: str) -> None:
+    if getattr(sys, "frozen", False):
+        return
     try:
         with open(_log_path(), "a", encoding="utf-8") as fh:
             fh.write(message + "\n")

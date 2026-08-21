@@ -5,6 +5,8 @@ Keeping these separate from logic means that if Flydigi ships a firmware
 update that moves a bit, there is exactly one file to change.
 """
 
+from shared.config import MAPPABLE_BUTTONS
+
 # ── HID device identity ───────────────────────────────────────────────────────
 # Confirmed via hidapitester / Windows Device Manager captures
 # (see tools/monitoring_buttons.py, which is what these values were
@@ -106,34 +108,13 @@ ALL_BUTTONS: frozenset[str] = frozenset(
     for name in byte_map.values()
 )
 
-# Buttons the GUI exposes for remapping.
-#
-# v1.2 change: previously this excluded standard XInput buttons (A/B/X/Y,
-# bumpers, triggers, sticks, dpad) because they already work via
-# XInput/DirectInput. The new controller artwork makes every physical
-# button clickable, so this now covers everything in ALL_BUTTONS.
-#
-# IMPORTANT: mapping a standard XInput button (A, B, LT, RB, DPad Up, ...)
-# means the physical press will now ALSO fire through XInput as normal –
-# this remapper does not (and cannot, from a second HID interface) suppress
-# the XInput report. Only map these if double input is what you want.
-MAPPABLE_BUTTONS: tuple[str, ...] = (
-    # Face buttons
-    "A", "B", "X", "Y",
-    # D-Pad
-    "UP", "DOWN", "LEFT", "RIGHT",
-    # Shoulder
-    "LB", "RB", "LT", "RT",
-    # Sticks (click)
-    "LS", "RS",
-    # Select / Start
-    "SELECT", "START",
-    # Macro / extra buttons (original v1 set)
-    "M1", "M2", "M3", "M4",
-    "LM", "RM",
-    "C",  "Z",
-    "HOME", "Arrow", "Circle",
-)
+# MAPPABLE_BUTTONS itself now lives in shared/config.py (it's config-schema
+# vocabulary, not HID decode logic). Sanity check that every button the
+# schema allows to be mapped is actually something the decoder can produce —
+# fails at import time, not at the first button press.
+_unmappable = set(MAPPABLE_BUTTONS) - ALL_BUTTONS
+if _unmappable:
+    raise RuntimeError(f"MAPPABLE_BUTTONS references undecodable button(s): {_unmappable}")
 
 # How long (seconds) a button's raw HID bit must hold its new state
 # before it's treated as a real press/release rather than contact

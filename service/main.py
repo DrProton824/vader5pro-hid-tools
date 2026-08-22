@@ -130,7 +130,7 @@ def main() -> None:
     # lives in config.json (see src/shared/config.py) so a future GUI
     # settings screen can flip it – that just requires restarting the
     # service to take effect for now.
-    send_vendor_init = bool(settings.get("vendor_handshake", True))
+    send_vendor_init = bool(settings.get("vendor_initialization", True))
 
     reader = RawInputReaderThread(
         callback=mapper.handle_event,

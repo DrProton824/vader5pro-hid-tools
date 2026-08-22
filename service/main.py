@@ -31,14 +31,6 @@ import threading
 import time
 import pathlib
 
-import ctypes
-import subprocess
-import sys
-import threading
-import time
-import pathlib
-
-
 # Tell Windows this process handles DPI scaling itself.
 # Must happen before creating any Win32 windows.
 try:

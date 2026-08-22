@@ -13,7 +13,7 @@ needing a controller or Windows at all.
 
 from __future__ import annotations
 
-from ..hid.hid_protocol import ButtonEvent, ButtonPressed, ButtonReleased
+from ..hid_interface.hid_protocol import ButtonEvent, ButtonPressed, ButtonReleased
 from .input_sender import InputSender
 
 

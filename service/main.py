@@ -60,6 +60,10 @@ def _bootstrap_path() -> pathlib.Path:
 _ROOT = _bootstrap_path()
 sys.path.insert(0, str(_ROOT))
 
+# From source, icons live under service/assets/icons/. In a frozen build
+# they're flattened to assets/icons/ next to the exe (see build/build.py).
+_ICON_DIR = (_ROOT / "assets" / "icons") if getattr(sys, "frozen", False) else (_ROOT / "service" / "assets" / "icons")
+
 from shared import config as cfg
 from service import single_instance
 from shared.config import ConfigWatcher
@@ -171,8 +175,8 @@ def main() -> None:
 
     icon = TrayIcon(
         tooltip="V5Pro Remapper",
-        icon_path=_ROOT / "assets" / "icons" / "service_connected.ico",
-        disconnected_icon_path=_ROOT / "assets" / "icons" / "service_disconnected.ico",
+        icon_path=_ICON_DIR / "service_connected.ico",
+        disconnected_icon_path=_ICON_DIR / "service_disconnected.ico",
         menu_items=[
             ("Open Config", _open_config),
             ("Exit", _quit),

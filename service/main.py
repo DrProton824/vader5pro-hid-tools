@@ -71,7 +71,7 @@ sys.path.insert(0, str(_ROOT))
 from shared import config as cfg
 from service import single_instance
 from shared.config import ConfigWatcher
-from service.hid.rawinput_reader import RawInputReaderThread
+from service.hid_interface.rawinput_reader import RawInputReaderThread
 from service.mapping.input_sender import InputSender
 from service.mapping.mapper import ButtonMapper
 from service.tray import TrayIcon

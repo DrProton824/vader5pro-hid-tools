@@ -197,6 +197,38 @@ def load_settings() -> Settings:
     except Exception:
         return dict(DEFAULT_SETTINGS)
 
+def get_macros() -> list[ConfigData]:
+    return load_config().get("macros", [])
+
+def save_macros(macros: list[ConfigData]) -> None:
+    data = load_config()
+    data["macros"] = macros
+    save_config(data)
+
+def get_profiles() -> list[ConfigData]:
+    return load_config().get("profiles", [])
+
+def save_profiles(profiles: list[ConfigData]) -> None:
+    data = load_config()
+    data["profiles"] = profiles
+    save_config(data)
+
+def get_active_profile() -> str:
+    return load_config().get("active_profile", DEFAULT_PROFILE_ID)
+
+def set_active_profile(profile_id: str) -> None:
+    data = load_config()
+    data["active_profile"] = profile_id
+    save_config(data)
+
+def get_settings() -> Settings:
+    return load_settings()
+
+def save_settings(settings: Settings) -> None:
+    data = load_config()
+    data["settings"] = settings
+    save_config(data)
+
 
 class ConfigWatcher:
     """

@@ -27,12 +27,16 @@ from .constants import (
 )
 
 
+# after
 def find_vendor_interface_path() -> Optional[bytes]:
     """Locate the vendor (usage page 0xFFA0) HID interface path, if present."""
     try:
         candidates = hid.enumerate(VENDOR_ID, PRODUCT_ID)
-    except Exception:
+    except Exception as exc:
+        print(f"[vendor_init] hid.enumerate() raised: {exc!r}")
         return None
+    print(f"[vendor_init] {len(candidates)} candidate(s): "
+          f"{[(c.get('interface_number'), hex(c.get('usage_page', 0))) for c in candidates]}")
     for info in candidates:
         if info.get("interface_number") == 1 and info.get("usage_page") == USAGE_PAGE:
             return info.get("path")

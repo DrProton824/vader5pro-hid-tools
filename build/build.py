@@ -120,7 +120,10 @@ def build_config_gui() -> None:
         "VaderConfig",
         GUI_ROOT / "MainPage.py",
         CONFIG_ICON,
-        extra=["--collect-all", "customtkinter"],
+        extra=[
+            "--collect-all", "customtkinter",
+            "--collect-all", "PIL",
+        ],
     ))
 
 

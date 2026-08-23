@@ -1,5 +1,5 @@
 """
-service/main.py — VaderService – background remapper process.
+src/service/main.py — VaderService – background remapper process.
 
 Startup sequence
 ────────────────
@@ -66,9 +66,11 @@ _ICON_DIR = (_ROOT / "assets" / "icons") if getattr(sys, "frozen", False) else (
 
 from shared import config as cfg
 from service import single_instance
+from service import status_writer
 from shared.config import ConfigWatcher
 from service.hid_interface.rawinput_reader import RawInputReaderThread
 from service.mapping.input_sender import InputSender
+from service.mapping.macro_player import MacroPlayer
 from service.mapping.mapper import ButtonMapper
 from service.tray import TrayIcon
 
@@ -103,12 +105,14 @@ def main() -> None:
         return
 
     # ── Bootstrap ─────────────────────────────────────────────────────────────
-    mapping = cfg.load()
     settings = cfg.load_settings()
 
     sender = InputSender()
-    mapper = ButtonMapper(sender)
-    mapper.update_mapping(mapping)
+    macro_player = MacroPlayer()
+    mapper = ButtonMapper(sender, macro_player)
+    mapper.update_bindings(cfg.load_bindings())
+
+    status_writer.write(connected=False)  # dongle enumeration visible in the GUI immediately, even before pairing
 
     icon_holder: dict[str, TrayIcon] = {}
 
@@ -116,6 +120,9 @@ def main() -> None:
         icon = icon_holder.get("icon")
         if icon is not None:
             icon.update_status(connected)
+        # Battery isn't decoded yet (see status_writer.write's docstring) —
+        # always None here until a report byte is identified for it.
+        status_writer.write(connected=connected, battery=None)
 
     # Vendor initialization/stop sequence – required on profiles that have no
     # macro/extra button currently assigned in the Flydigi software
@@ -143,7 +150,7 @@ def main() -> None:
         while not stop_event.is_set():
             time.sleep(CONFIG_POLL_INTERVAL)
             if watcher.changed():
-                mapper.update_mapping(cfg.load())
+                mapper.update_bindings(cfg.load_bindings())
 
     watcher_thread = threading.Thread(
         target=_watch_config,

@@ -169,8 +169,10 @@ def save_config(data: ConfigData) -> None:
 def load() -> Mapping:
     """
     Return the active profile's mapping as a flat {button: shortcut} dict.
-    Macro-type assignments resolve to "" (unmapped) — the service can only
-    play keybind shortcuts today. Never raises.
+    Macro-type assignments resolve to "" (unmapped) — kept for anything
+    that only wants keybinds (e.g. InputSender.update_mappings). Services
+    that also need to play macros should use load_bindings() instead.
+    Never raises.
     """
     try:
         data = load_config()
@@ -187,8 +189,50 @@ def load() -> Mapping:
         if isinstance(assignment, dict) and assignment.get("type") == "keybind":
             mapping[button] = str(assignment.get("value", ""))
         else:
-            mapping[button] = ""  # unmapped, or a macro — see MacroPlayer follow-up
+            mapping[button] = ""  # unmapped, or a macro — see load_bindings()
     return mapping
+
+
+Binding = dict[str, Any]
+
+
+def load_bindings() -> dict[str, Binding]:
+    """
+    Return the active profile's mapping resolved to executable bindings:
+
+        {button: {"type": "keybind", "value": "<shortcut>"}}
+        {button: {"type": "macro", "actions": [<recorded actions>]}}
+
+    Macro names are resolved against the top-level "macros" list here, so
+    callers (ButtonMapper) never need to know the config schema — a
+    button with a macro assignment pointing at a since-deleted or
+    since-renamed macro just resolves to an empty action list. Never
+    raises.
+    """
+    try:
+        data = load_config()
+    except Exception:
+        return {button: {"type": "keybind", "value": ""} for button in MAPPABLE_BUTTONS}
+
+    active_id = data.get("active_profile", DEFAULT_PROFILE_ID)
+    profile = next((p for p in data.get("profiles", []) if p["id"] == active_id), None)
+    raw_mapping = (profile or {}).get("mapping", {})
+    macros_by_name = {m.get("name"): m.get("actions", []) for m in data.get("macros", [])}
+
+    bindings: dict[str, Binding] = {}
+    for button in MAPPABLE_BUTTONS:
+        assignment = raw_mapping.get(button)
+        kind = assignment.get("type") if isinstance(assignment, dict) else None
+
+        if kind == "macro":
+            actions = macros_by_name.get(str(assignment.get("value", "")), [])
+            bindings[button] = {"type": "macro", "actions": actions}
+        elif kind == "keybind":
+            bindings[button] = {"type": "keybind", "value": str(assignment.get("value", ""))}
+        else:
+            bindings[button] = {"type": "keybind", "value": ""}
+
+    return bindings
 
 
 def load_settings() -> Settings:

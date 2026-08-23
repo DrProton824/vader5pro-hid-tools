@@ -1,5 +1,5 @@
 """
-src/service/main.py — VaderService – background remapper process.
+service/main.py — VaderService – background remapper process.
 
 Startup sequence
 ────────────────

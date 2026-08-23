@@ -161,9 +161,12 @@ def main() -> None:
                 subprocess.Popen([str(config_exe)], cwd=str(_ROOT))
             else:
                 # Running from source – fall back to launching the module.
+                # MainPage.py lives under gui/, so both the script path and
+                # the cwd it runs from need to point there, not at _ROOT.
+                gui_main = _ROOT / "gui" / "MainPage.py"
                 subprocess.Popen(
-                    [sys.executable, "MainPage.py"],
-                    cwd=str(_ROOT),
+                    [sys.executable, str(gui_main)],
+                    cwd=str(gui_main.parent),
                 )
         except Exception:
             pass

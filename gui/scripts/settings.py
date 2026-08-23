@@ -11,6 +11,7 @@ watches.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any, Dict
 
@@ -56,7 +57,17 @@ def _save_settings(settings: Dict[str, Any]) -> None:
 
 
 def _service_exe_path() -> str:
-    return str(Path(__file__).resolve().parent.parent / "VaderService.exe")
+    if getattr(sys, "frozen", False):
+        # Both onefile exes land flat in the same dist folder - sys.executable
+        # is this exe's own real path (unlike __file__, which points inside
+        # PyInstaller's temp extraction dir for a frozen build).
+        return f'"{Path(sys.executable).resolve().parent / "VaderService.exe"}"'
+    # Running from source: no built exe exists yet, so autostart launches
+    # the service module directly instead.
+    repo_root = Path(__file__).resolve().parents[2]
+    pythonw = Path(sys.executable).with_name("pythonw.exe")
+    interpreter = pythonw if pythonw.exists() else Path(sys.executable)
+    return f'"{interpreter}" "{repo_root / "service" / "main.py"}"'
 
 
 def _enable_autostart() -> None:

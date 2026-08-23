@@ -135,21 +135,22 @@ def copy_runtime_files() -> None:
     if not dest_config.exists():
         shutil.copy2(CONFIG, dest_config)
 
-    # Service tray icons - flat "assets/icons/" next to the exe, matching
-    # service/main.py's frozen-mode lookup.
-    dest_service_icons = DIST / "assets" / "icons"
-    if dest_service_icons.exists():
-        shutil.rmtree(dest_service_icons)
-    if SERVICE_ASSETS.exists():
-        shutil.copytree(SERVICE_ASSETS / "icons", dest_service_icons)
+    # Shared assets directory for both VaderService.exe and VaderConfig.exe.
+    dest_assets = DIST / "assets"
+    if dest_assets.exists():
+        shutil.rmtree(dest_assets)
 
-    # GUI assets, staged for VaderConfig.exe (see module docstring - not
-    # yet wired into the frozen exe's asset lookup).
-    dest_gui_assets = DIST / "gui" / "assets"
-    if dest_gui_assets.exists():
-        shutil.rmtree(dest_gui_assets)
+    # Copy all GUI assets into the shared assets directory.
     if GUI_ASSETS.exists():
-        shutil.copytree(GUI_ASSETS, dest_gui_assets)
+        shutil.copytree(GUI_ASSETS, dest_assets)
+
+    # Add VaderService tray icons to the shared assets/icons directory.
+    if SERVICE_ASSETS.exists():
+        shutil.copytree(
+            SERVICE_ASSETS / "icons",
+            dest_assets / "icons",
+            dirs_exist_ok=True,
+        )
 
 
 def main() -> None:

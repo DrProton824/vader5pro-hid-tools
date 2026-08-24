@@ -38,8 +38,6 @@ except ImportError:
 
 from .hid_interface.constants import PRODUCT_ID, VENDOR_ID
 
-_IFACE_TOKEN = re.compile(rb"&(?:mi|ig)_[0-9a-f]+(?:&col[0-9a-f]+)?", re.IGNORECASE)
-
 
 def _status_path() -> pathlib.Path:
     if getattr(sys, "frozen", False):
@@ -49,54 +47,53 @@ def _status_path() -> pathlib.Path:
     return base / "status.json"
 
 
+_NON_ALNUM = re.compile(r"[^a-z0-9]+")
+
+
+def _normalize_serial(serial) -> str:
+    return _NON_ALNUM.sub("", (serial or "").lower())
+
+
 def _dongle_key(info: dict) -> str:
     """
     Identify one physical dongle across the (up to) 4 HID interfaces it
     exposes under the same VID/PID.
 
-    A Windows composite-device path looks like:
+    This used to be done by parsing the Windows device path, on the
+    assumption that sibling interfaces of one physical dongle share
+    some common segment of it. Real hid.enumerate() output from the
+    hardware this was reported against showed that's not true here —
+    each interface gets a *completely* distinct instance-id hash in
+    its path (e.g. "9&3b1490e5&0&0000" vs "a&1ddbf4b0&0&0000" vs
+    "9&173d5323&0&0000"), so no amount of path-slicing was ever going
+    to merge them.
 
-        \\\\?\\hid#vid_37d7&pid_2401&mi_02&col01#7&2c46f6b&0&0000#{guid}
+    What that same diagnostic showed IS shared: serial_number. All 4
+    interfaces report one, just inconsistently formatted — the vendor
+    interfaces report "Flydigi Vader 5 Pro" while the XInput-compatible
+    interface Windows synthesizes reports "FLYDIGI_VADER_5_PRO". Same
+    string, different case/punctuation, so key off a normalized
+    (lowercased, alphanumeric-only) version of it instead.
 
-    Two things vary between sibling interfaces of one physical dongle:
-    the "mi_NN" interface-number token in the device-id segment
-    (mi_00/mi_01/...) — and, separately, Windows exposes the
-    XInput-compatible interface with an "ig_NN" token instead of
-    "mi_NN" there, which an mi-only strip never matched. On top of
-    that, the instance-id segment right after it ("7&2c46f6b&0&0000")
-    also carries a trailing per-interface ordinal ("&0000", "&0001", ...)
-    that differs interface-to-interface even once the mi_/ig_ token is
-    removed. Stripping only the mi_NN token (as an earlier version of
-    this function did) left each interface with a distinct key, so
-    every interface — and the separately-named XInput one — showed up
-    as its own dropdown entry instead of merging into one.
-
-    The part that *is* shared across sibling interfaces of the same
-    physical device is the hash right before that trailing ordinal
-    ("7&2c46f6b&0"), so key off the device-id segment (with mi_/ig_
-    stripped) plus that hash instead.
-
-    serial_number is deliberately NOT used here: some interfaces of the
-    same physical dongle report it and others don't (a real hidapi/
-    Windows quirk on this device), which produced extra dropdown
-    entries for one dongle instead of merging them.
+    Caveat: this "serial" isn't actually unique per physical unit (it's
+    the model name, not an ID), so two real Vader 5 Pro dongles plugged
+    in at once would collapse into a single dropdown entry rather than
+    two. Given remapping more than one controller at once isn't
+    implemented anyway (see PROJECT.md), that's an acceptable trade for
+    fixing the one-dongle-shows-as-four bug this replaces.
     """
+    serial = _normalize_serial(info.get("serial_number"))
+    if serial:
+        return serial
+
+    # No serial reported at all on this interface (seen on some other
+    # hardware/driver combos) - fall back to the raw path. Won't merge
+    # correctly with siblings, but degrades gracefully instead of
+    # crashing or silently dropping the entry.
     path = info.get("path") or b""
     if isinstance(path, str):
         path = path.encode("utf-8", errors="ignore")
-    path = path.lower()
-
-    segments = path.split(b"#")
-    if len(segments) >= 3:
-        device_id = _IFACE_TOKEN.sub(b"", segments[1])
-        instance_id = segments[2].rsplit(b"&", 1)[0]  # drop the trailing per-interface ordinal
-        return (device_id + b"|" + instance_id).decode(errors="ignore")
-
-    # Path didn't look like the expected Windows composite-device shape
-    # (e.g. a different platform) — fall back to just stripping the
-    # interface token so we degrade to the old behaviour rather than
-    # crash.
-    return _IFACE_TOKEN.sub(b"", path).decode(errors="ignore")
+    return path.lower().decode(errors="ignore")
 
 
 def _pick_display_info(members: list[dict]) -> dict:

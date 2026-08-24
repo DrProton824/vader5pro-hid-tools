@@ -207,8 +207,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#f5f5f5',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=30, weight="normal", slant="roman"),
@@ -419,8 +417,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#f5f5f5',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
         )
@@ -445,8 +441,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#f5f5f5',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
         )
@@ -1136,8 +1130,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#9298a1',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=19, weight="normal", slant="roman"),
@@ -1175,8 +1167,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#f5f5f5',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=2,
-            border_color='#666c70',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=17, weight="normal", slant="roman"),
@@ -1232,8 +1222,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#9298a1',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=21, weight="normal", slant="roman"),
@@ -1276,8 +1264,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#9298a1',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=19, weight="normal", slant="roman"),
@@ -1398,8 +1384,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#9298a1',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=19, weight="normal", slant="roman"),
@@ -1437,8 +1421,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#f5f5f5',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=2,
-            border_color='#666c70',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=17, weight="normal", slant="roman"),
@@ -1494,8 +1476,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#9298a1',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=21, weight="normal", slant="roman"),
@@ -1538,8 +1518,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#9298a1',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=19, weight="normal", slant="roman"),
@@ -1676,8 +1654,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#f5f5f5',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=25, weight="normal", slant="roman"),
@@ -1912,8 +1888,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#f5f5f5',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=25, weight="normal", slant="roman"),
@@ -1987,8 +1961,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#f5f5f5',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=15, weight="normal", slant="roman"),
@@ -2371,8 +2343,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#f5f5f5',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=25, weight="normal", slant="roman"),
@@ -2606,8 +2576,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#f5f5f5',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=25, weight="normal", slant="roman"),
@@ -2681,8 +2649,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#f5f5f5',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=15, weight="normal", slant="roman"),
@@ -2787,15 +2753,13 @@ class Vader5mapper(ctk.CTk):
             cursor='',
             takefocus=False,
             fg_color='transparent',
-            text='Automatation:',
+            text='WIP',
             font_wrap=True,
             anchor='w',
             justify='center',
             text_color='#f5f5f5',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=15, weight="normal", slant="roman"),
@@ -2803,278 +2767,6 @@ class Vader5mapper(ctk.CTk):
         self.fcpeeo_label1.pack(side="top", fill="x", pady=2)
         self.fcpeeo_label1._ctkmaker_min = 16
         self.fcpeeo_label1._ctkmaker_fixed = True
-
-        self.fcpeeo_selectbox1 = ctk.CTkFrame(
-            self.fcpee_options,
-            width=320,
-            height=30,
-            corner_radius=6,
-            border_width=0,
-            border_color='#565b5e',
-            fg_color='transparent',
-        )
-        self.fcpeeo_selectbox1.pack(side="top", fill="x", pady=2)
-        self.fcpeeo_selectbox1._ctkmaker_min = 20
-        self.fcpeeo_selectbox1._ctkmaker_fixed = True
-
-        self.fcpeeo_selectbox1.pack_propagate(False)
-        self.fcpeeo_selectbox1.grid_propagate(False)
-
-        self.fcpeeos_frameL1 = ctk.CTkFrame(
-            self.fcpeeo_selectbox1,
-            width=15,
-            height=150,
-            corner_radius=6,
-            border_width=0,
-            border_color='#565b5e',
-            fg_color='transparent',
-        )
-        self.fcpeeos_frameL1.pack(side="left", fill="y", padx=2)
-        self.fcpeeos_frameL1._ctkmaker_min = 20
-        self.fcpeeos_frameL1._ctkmaker_fixed = True
-
-        self.fcpeeos_switch1 = ctk.CTkSwitch(
-            self.fcpeeo_selectbox1,
-            width=30,
-            height=20,
-            corner_radius=9,
-            button_length=0,
-            switch_width=30,
-            switch_height=15,
-            fg_color='#9298a1',
-            progress_color='#7dabc3',
-            button_color='#f5f5f5',
-            button_hover_color='#bec3cb',
-            text='',
-            text_color='#9298a1',
-            text_color_disabled='#9298a1',
-            command=self._script_2.fcpeeos_switch1,
-        )
-        self.fcpeeos_switch1.pack(side="left", fill="y", padx=2)
-        self.fcpeeos_switch1._ctkmaker_min = 50
-        self.fcpeeos_switch1._ctkmaker_fixed = True
-
-        self.fcpeeos_label1 = ctk.CTkLabel(
-            self.fcpeeo_selectbox1,
-            width=100,
-            corner_radius=0,
-            border_width=0,
-            border_color='#565b5e',
-            padx=10,
-            pady=0,
-            cursor='',
-            takefocus=False,
-            fg_color='transparent',
-            text='OFF (default)',
-            font_wrap=True,
-            anchor='w',
-            justify='left',
-            text_color='#ffffff',
-            text_color_disabled='#a0a0a0',
-            compound='left',
-            full_circle=True,
-            unified_bind=True,
-        )
-        self.fcpeeos_label1.pack(side="left", fill="both", expand=True, padx=2)
-        self.fcpeeos_label1._ctkmaker_min = 105
-
-        self.fcpeeo_selectbox1.bind("<Configure>", lambda _e, _c=self.fcpeeo_selectbox1: ctk.balance_pack(_c, 'width'))
-
-        self.fcpeeo_frameM1 = ctk.CTkFrame(
-            self.fcpee_options,
-            height=10,
-            corner_radius=6,
-            border_width=0,
-            border_color='#565b5e',
-            fg_color='transparent',
-        )
-        self.fcpeeo_frameM1.pack(side="top", fill="x", pady=2)
-        self.fcpeeo_frameM1._ctkmaker_min = 20
-        self.fcpeeo_frameM1._ctkmaker_fixed = True
-
-        self.fcpeeo_label2 = ctk.CTkLabel(
-            self.fcpee_options,
-            width=100,
-            corner_radius=0,
-            padx=10,
-            pady=0,
-            cursor='',
-            takefocus=False,
-            fg_color='transparent',
-            text='Start with Program:',
-            font_wrap=True,
-            anchor='w',
-            justify='center',
-            text_color='#f5f5f5',
-            text_color_disabled='#9298a1',
-            compound='left',
-            border_width=0,
-            border_color='#565b5e',
-            full_circle=True,
-            unified_bind=True,
-            font=ctk.CTkFont(size=15, weight="normal", slant="roman"),
-        )
-        self.fcpeeo_label2.pack(side="top", fill="x", pady=2)
-        self.fcpeeo_label2._ctkmaker_min = 16
-        self.fcpeeo_label2._ctkmaker_fixed = True
-
-        self.fcpeeo_selectbox2 = ctk.CTkFrame(
-            self.fcpee_options,
-            width=320,
-            height=30,
-            corner_radius=6,
-            border_width=0,
-            border_color='#565b5e',
-            fg_color='transparent',
-        )
-        self.fcpeeo_selectbox2.pack(side="top", fill="x", pady=2)
-        self.fcpeeo_selectbox2._ctkmaker_min = 20
-        self.fcpeeo_selectbox2._ctkmaker_fixed = True
-
-        self.fcpeeo_selectbox2.pack_propagate(False)
-        self.fcpeeo_selectbox2.grid_propagate(False)
-
-        self.fcpeeos_frameL2 = ctk.CTkFrame(
-            self.fcpeeo_selectbox2,
-            width=15,
-            height=150,
-            corner_radius=6,
-            border_width=0,
-            border_color='#565b5e',
-            fg_color='transparent',
-        )
-        self.fcpeeos_frameL2.pack(side="left", fill="y", padx=2)
-        self.fcpeeos_frameL2._ctkmaker_min = 20
-        self.fcpeeos_frameL2._ctkmaker_fixed = True
-
-        self.fcpeeos_combobox2 = ctk.CTkComboBox(
-            self.fcpeeo_selectbox2,
-            width=280,
-            height=30,
-            corner_radius=4,
-            border_width=1,
-            border_color='#565b5e',
-            values=[''],
-            fg_color='#343638',
-            button_color='#565b5e',
-            button_hover_color='#7a848d',
-            dropdown_fg_color='#2b2b2b',
-            dropdown_hover_color='#3a3a3a',
-            dropdown_text_color='#f5f5f5',
-            text_color='#f5f5f5',
-            text_color_disabled='#9298a1',
-            font=ctk.CTkFont(size=15, weight="normal", slant="roman"),
-            command=lambda v: (self._script_2.fcpeeos_combobox2()),
-        )
-        self.fcpeeos_combobox2.pack(side="left", fill="y", padx=2)
-        self.fcpeeos_combobox2._ctkmaker_min = 60
-        self.fcpeeos_combobox2._ctkmaker_fixed = True
-        self.fcpeeos_combobox2.set('Select Program ...')
-        self.fcpeeos_combobox2._scrollable_dropdown = ScrollableDropdown(
-            self.fcpeeos_combobox2,
-            font=self.fcpeeos_combobox2.cget("font"),
-            fg_color='#2b2b2b',
-            text_color='#f5f5f5',
-            hover_color='#3a3a3a',
-            offset=4,
-            button_align='left',
-            max_visible=8,
-            border_width=2,
-            border_color='#565b5e',
-            corner_radius=6,
-        )
-
-        self.fcpeeo_selectbox2.bind("<Configure>", lambda _e, _c=self.fcpeeo_selectbox2: ctk.balance_pack(_c, 'width'))
-
-        self.fcpeeo_frameM2 = ctk.CTkFrame(
-            self.fcpee_options,
-            width=10,
-            height=10,
-            corner_radius=6,
-            border_width=0,
-            border_color='#565b5e',
-            fg_color='transparent',
-        )
-        self.fcpeeo_frameM2.pack(side="top", fill="x", pady=2)
-        self.fcpeeo_frameM2._ctkmaker_min = 20
-        self.fcpeeo_frameM2._ctkmaker_fixed = True
-
-        self.fcpeeo_label3 = ctk.CTkLabel(
-            self.fcpee_options,
-            width=100,
-            corner_radius=0,
-            padx=10,
-            pady=0,
-            cursor='',
-            takefocus=False,
-            fg_color='transparent',
-            text='Hotkey:',
-            font_wrap=True,
-            anchor='w',
-            justify='center',
-            text_color='#f5f5f5',
-            text_color_disabled='#9298a1',
-            compound='left',
-            border_width=0,
-            border_color='#565b5e',
-            full_circle=True,
-            unified_bind=True,
-            font=ctk.CTkFont(size=15, weight="normal", slant="roman"),
-        )
-        self.fcpeeo_label3.pack(side="top", fill="x", pady=2)
-        self.fcpeeo_label3._ctkmaker_min = 16
-        self.fcpeeo_label3._ctkmaker_fixed = True
-
-        self.fcpeeo_selectbox3 = ctk.CTkFrame(
-            self.fcpee_options,
-            width=320,
-            height=30,
-            corner_radius=6,
-            border_width=0,
-            border_color='#565b5e',
-            fg_color='transparent',
-        )
-        self.fcpeeo_selectbox3.pack(side="top", fill="x", pady=2)
-        self.fcpeeo_selectbox3._ctkmaker_min = 20
-        self.fcpeeo_selectbox3._ctkmaker_fixed = True
-
-        self.fcpeeo_selectbox3.pack_propagate(False)
-        self.fcpeeo_selectbox3.grid_propagate(False)
-
-        self.fcpeeos_frameL3 = ctk.CTkFrame(
-            self.fcpeeo_selectbox3,
-            width=15,
-            height=150,
-            corner_radius=6,
-            border_width=0,
-            border_color='#565b5e',
-            fg_color='transparent',
-        )
-        self.fcpeeos_frameL3.pack(side="left", fill="y", padx=2)
-        self.fcpeeos_frameL3._ctkmaker_min = 20
-        self.fcpeeos_frameL3._ctkmaker_fixed = True
-
-        self.fcpeeos_entry3 = ctk.CTkEntry(
-            self.fcpeeo_selectbox3,
-            width=280,
-            height=30,
-            corner_radius=4,
-            border_width=1,
-            border_color='#565b5e',
-            placeholder_text='Enter Hotkey...',
-            fg_color='#343638',
-            text_color='#f5f5f5',
-            placeholder_text_color='#9298a1',
-            justify='left',
-            show="•",
-            font=ctk.CTkFont(size=15, weight="normal", slant="roman"),
-        )
-        self.fcpeeos_entry3.pack(side="left", fill="y", padx=2)
-        self.fcpeeos_entry3._ctkmaker_min = 50
-        self.fcpeeos_entry3._ctkmaker_fixed = True
-        self.fcpeeos_entry3.insert(0, 'Enter Hotkey...')
-
-        self.fcpeeo_selectbox3.bind("<Configure>", lambda _e, _c=self.fcpeeo_selectbox3: ctk.balance_pack(_c, 'width'))
 
         self.fcpee_options.bind("<Configure>", lambda _e, _c=self.fcpee_options: ctk.balance_pack(_c, 'height'), add="+")
 
@@ -3238,8 +2930,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#f5f5f5',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=25, weight="normal", slant="roman"),
@@ -3297,8 +2987,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#f5f5f5',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=19, weight="normal", slant="roman"),
@@ -3317,15 +3005,13 @@ class Vader5mapper(ctk.CTk):
             cursor='',
             takefocus=False,
             fg_color='transparent',
-            text='Windows Autostart:',
+            text='WIP',
             font_wrap=True,
             anchor='w',
             justify='center',
             text_color='#f5f5f5',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=15, weight="normal", slant="roman"),
@@ -3333,142 +3019,6 @@ class Vader5mapper(ctk.CTk):
         self.fcsvs_label2.pack(side="top", fill="x", pady=2)
         self.fcsvs_label2._ctkmaker_min = 16
         self.fcsvs_label2._ctkmaker_fixed = True
-
-        self.fcsvs_switchbox2 = ctk.CTkFrame(
-            self.fcsv_settings,
-            height=40,
-            corner_radius=6,
-            border_width=0,
-            border_color='#565b5e',
-            fg_color='transparent',
-        )
-        self.fcsvs_switchbox2.pack(side="top", fill="x", pady=2)
-        self.fcsvs_switchbox2._ctkmaker_min = 20
-        self.fcsvs_switchbox2._ctkmaker_fixed = True
-
-        self.fcsvss_switch2 = ctk.CTkSwitch(
-            self.fcsvs_switchbox2,
-            width=30,
-            height=15,
-            corner_radius=9,
-            button_length=0,
-            switch_width=30,
-            switch_height=15,
-            fg_color='#9298a1',
-            progress_color='#7dabc3',
-            button_color='#f5f5f5',
-            button_hover_color='#bec3cb',
-            text='',
-            text_color='#9298a1',
-            text_color_disabled='#9298a1',
-            command=self._script_3.fcsvss_switch2,
-        )
-        self.fcsvss_switch2.place(x=20, y=7)
-
-        self.fcsvss_label2 = ctk.CTkLabel(
-            self.fcsvs_switchbox2,
-            width=100,
-            corner_radius=0,
-            border_width=0,
-            border_color='#565b5e',
-            padx=0,
-            pady=0,
-            cursor='',
-            takefocus=False,
-            fg_color='transparent',
-            text='OFF (default)',
-            font_wrap=True,
-            anchor='w',
-            justify='left',
-            text_color='#ffffff',
-            text_color_disabled='#a0a0a0',
-            compound='left',
-            full_circle=True,
-            unified_bind=True,
-        )
-        self.fcsvss_label2.place(x=70, y=0)
-
-        self.fcsvs_label3 = ctk.CTkLabel(
-            self.fcsv_settings,
-            width=100,
-            height=30,
-            corner_radius=0,
-            padx=20,
-            pady=0,
-            cursor='',
-            takefocus=False,
-            fg_color='transparent',
-            text='Close to Tray:',
-            font_wrap=True,
-            anchor='w',
-            justify='center',
-            text_color='#f5f5f5',
-            text_color_disabled='#9298a1',
-            compound='left',
-            border_width=0,
-            border_color='#565b5e',
-            full_circle=True,
-            unified_bind=True,
-            font=ctk.CTkFont(size=15, weight="normal", slant="roman"),
-        )
-        self.fcsvs_label3.pack(side="top", fill="x", pady=2)
-        self.fcsvs_label3._ctkmaker_min = 16
-        self.fcsvs_label3._ctkmaker_fixed = True
-
-        self.fcsvs_switchbox3 = ctk.CTkFrame(
-            self.fcsv_settings,
-            height=40,
-            corner_radius=6,
-            border_width=0,
-            border_color='#565b5e',
-            fg_color='transparent',
-        )
-        self.fcsvs_switchbox3.pack(side="top", fill="x", pady=2)
-        self.fcsvs_switchbox3._ctkmaker_min = 20
-        self.fcsvs_switchbox3._ctkmaker_fixed = True
-
-        self.fcsvss_switch3 = ctk.CTkSwitch(
-            self.fcsvs_switchbox3,
-            width=30,
-            height=15,
-            corner_radius=9,
-            button_length=0,
-            switch_width=30,
-            switch_height=15,
-            fg_color='#9298a1',
-            progress_color='#7dabc3',
-            button_color='#f5f5f5',
-            button_hover_color='#bec3cb',
-            text='',
-            text_color='#9298a1',
-            text_color_disabled='#9298a1',
-            command=self._script_3.fcsvss_switch3,
-        )
-        self.fcsvss_switch3.place(x=20, y=7)
-        self.fcsvss_switch3.select()
-
-        self.fcsvss_label3 = ctk.CTkLabel(
-            self.fcsvs_switchbox3,
-            width=100,
-            corner_radius=0,
-            border_width=0,
-            border_color='#565b5e',
-            padx=0,
-            pady=0,
-            cursor='',
-            takefocus=False,
-            fg_color='transparent',
-            text='ON (default)',
-            font_wrap=True,
-            anchor='w',
-            justify='left',
-            text_color='#ffffff',
-            text_color_disabled='#a0a0a0',
-            compound='left',
-            full_circle=True,
-            unified_bind=True,
-        )
-        self.fcsvss_label3.place(x=70, y=0)
 
         self.fcsv_settings.bind("<Configure>", lambda _e, _c=self.fcsv_settings: ctk.balance_pack(_c, 'height'), add="+")
 
@@ -3627,8 +3177,6 @@ class Vader5mapper(ctk.CTk):
             text_color='#f5f5f5',
             text_color_disabled='#9298a1',
             compound='left',
-            border_width=0,
-            border_color='#565b5e',
             full_circle=True,
             unified_bind=True,
             font=ctk.CTkFont(size=25, weight="normal", slant="roman"),

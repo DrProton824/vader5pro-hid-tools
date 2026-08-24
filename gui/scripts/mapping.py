@@ -12,8 +12,9 @@ A button holds either a keybind or a macro, never both.
 
 ASSIGNMENTS: Stored per profile (keyed by profile id) as
 {"type": "keybind"|"macro", "value": "..."}. This extends the flat
-DEFAULT_MAPPING shape in config.py. VaderService.exe must support this
-type wrapper before these assignments can drive live remapping.
+DEFAULT_MAPPING shape in config.py. shared/config.py's load_bindings()
+resolves both types for the service — see service/mapping/mapper.py
+and service/mapping/macro_player.py.
 
 INDICATORS: Each assigned button gets a dot via
 _controller.set_indicator(). Indicators refresh on save, profile
@@ -37,6 +38,7 @@ _clear_assignment.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -58,7 +60,16 @@ except ImportError:
     from .controller_canvas import ControllerCanvas, HIGHLIGHT_COLORS, HIGHLIGHT_HOVER_COLORS
 
 SCRIPTS_DIR = Path(__file__).resolve().parent
-ASSETS_DIR = SCRIPTS_DIR.parent / "assets"
+
+# Frozen (PyInstaller onefile): __file__ resolves inside the temp
+# extraction dir, not the real dist folder — assets live next to the
+# exe instead (sys.executable), in the same flat assets/ folder
+# service/main.py's tray icons and status.json already use.
+# From source: assets live under gui/assets/ (one level above scripts/).
+if getattr(sys, "frozen", False):
+    ASSETS_DIR = Path(sys.executable).resolve().parent / "assets"
+else:
+    ASSETS_DIR = SCRIPTS_DIR.parent / "assets"
 
 # Runtime/exported projects keep these in assets/.
 # CTkMaker development exports still have them in scripts/. > fallback logic
@@ -81,15 +92,22 @@ IMAGE_X, IMAGE_Y = 30, 0
 IMAGE_DESIGN_WIDTH = 970
 
 
-from shared import config as _app_config
+try:
+    from shared import config as _app_config
+    _read_config = _app_config.load_config
+    _write_config = _app_config.save_config
+except ImportError:
+    CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
 
+    def _read_config() -> Dict[str, Any]:
+        if not CONFIG_PATH.exists():
+            return {}
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
 
-def _read_config() -> Dict[str, Any]:
-    return _app_config.load_config()
-
-
-def _write_config(data: Dict[str, Any]) -> None:
-    _app_config.save_config(data)
+    def _write_config(data: Dict[str, Any]) -> None:
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
 
 
 def _get_macro_names() -> List[str]:

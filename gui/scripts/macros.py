@@ -223,6 +223,17 @@ class Macros(CTkScript):
         )
         self.window.__dict__.setdefault("_navigation_guards", []).append(self._navigation_guard)
 
+    def on_close(self):
+        # keyboard.hook() installs a system-wide low-level hook — leaving
+        # it active while the process tears down is exactly the kind of
+        # state a global input hook should never be left in, especially
+        # alongside another low-level input hook/driver (the Flydigi
+        # SpaceStation software) also watching the same input stream.
+        # Closing the window mid-recording must unhook it in an orderly
+        # way rather than relying on process teardown to clean it up.
+        if self._recording:
+            self.fcmevhr_stop()
+
     # --- sessions ---
 
     def _new_session_dict(self, display_name: str, saved: bool, actions=None) -> Dict[str, Any]:

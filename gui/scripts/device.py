@@ -25,6 +25,7 @@ controller when the current selection is unavailable.
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -35,8 +36,20 @@ try:
 except ImportError:
     from .ui_utils import lock_combobox_typing
 
-STATUS_PATH = Path(__file__).resolve().parent.parent.parent / "status.json"
+if getattr(sys, "frozen", False):
+    # sys.executable is the real exe location; __file__ inside a frozen
+    # onefile build resolves into PyInstaller's temp extraction dir, not
+    # the dist folder both status.json and the exe actually live in.
+    STATUS_PATH = Path(sys.executable).resolve().parent / "status.json"
+else:
+    STATUS_PATH = Path(__file__).resolve().parent.parent.parent / "status.json"
 STATUS_POLL_MS = 2000
+
+# Same colors the rest of the app uses for this state — the polygon
+# hit-zone outline color for "assigned" (blue) and the Cancel/Stop
+# button color for a stopped/negative state (red).
+CONNECTED_COLOR = "#7DABC3"
+DISCONNECTED_COLOR = "#722F35"
 
 
 def _read_status() -> Dict[str, Any]:
@@ -58,7 +71,7 @@ class Device(CTkScript):
         lock_combobox_typing(self.window.fsnc_controllers)
         self.window.fsnc_controllers.configure(command=self.fsnc_controllers)
 
-        self.window.fsncs_status.configure(text="Disconnected")
+        self.window.fsncs_status.configure(text="Disconnected", text_color=DISCONNECTED_COLOR)
         self.window.fsncs_battery.configure(text="")
 
         self._refresh()
@@ -90,12 +103,15 @@ class Device(CTkScript):
     def _update_status_fields(self) -> None:
         controller = next((c for c in self._controllers if c.get("name") == self._selected_name), None)
         if controller is None:
-            self.window.fsncs_status.configure(text="Disconnected")
+            self.window.fsncs_status.configure(text="Disconnected", text_color=DISCONNECTED_COLOR)
             self.window.fsncs_battery.configure(text="")
             return
 
         connected = bool(controller.get("connected", False))
-        self.window.fsncs_status.configure(text="Connected" if connected else "Disconnected")
+        self.window.fsncs_status.configure(
+            text="Connected" if connected else "Disconnected",
+            text_color=CONNECTED_COLOR if connected else DISCONNECTED_COLOR,
+        )
 
         battery = controller.get("battery")
         self.window.fsncs_battery.configure(text=f"{battery}%" if isinstance(battery, (int, float)) else "")

@@ -1,11 +1,10 @@
 """Application settings, startup options, user preferences.
 
-Standalone on purpose: no imports beyond ctkmaker, so this file runs
-on its own before the rest of the project exists. _read_config/
-_write_config are duplicated from macros.py / profiles.py — factor
-them into a shared module once the GUI is merged with the wider
-project, so this reads/writes the same config.json VaderService.exe
-watches.
+_read_config/_write_config prefer shared/config.py (present once this
+runs inside the merged repo) and fall back to a local config.json for
+standalone testing inside CTkMaker itself — same pattern as macros.py
+and profiles.py. Either way this reads/writes the same config.json
+VaderService.exe watches.
 """
 
 from __future__ import annotations

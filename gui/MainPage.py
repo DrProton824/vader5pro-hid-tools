@@ -1,8 +1,21 @@
-# Makes `shared/` importable from gui/MainPage.py — must run before
-# any `from scripts...` import, since those import shared.config.
+# Makes `shared/` importable from gui/MainPage.py, and makes the many
+# CWD-relative 'assets/images/...' paths CTkMaker bakes into this file
+# resolve correctly regardless of how/where this is launched from.
+# Must run before any `from scripts...` import (those import
+# shared.config) and before ctk.CTk() creates the root window.
 import sys as _sys
+import os as _os
 from pathlib import Path as _Path
-_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent))
+
+if getattr(_sys, "frozen", False):
+    # PyInstaller onefile: __file__ resolves inside the temp extraction
+    # dir, not the real exe location - sys.executable is the one path
+    # that's actually next to the shipped assets/ folder.
+    _os.chdir(_Path(_sys.executable).resolve().parent)
+else:
+    _gui_dir = _Path(__file__).resolve().parent
+    _os.chdir(_gui_dir)
+    _sys.path.insert(0, str(_gui_dir.parent))
 
 # DPI-awareness fix for Vader5Mapper.
 #

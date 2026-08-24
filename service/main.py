@@ -184,7 +184,7 @@ def main() -> None:
         icon_holder["icon"].stop()
 
     icon = TrayIcon(
-        tooltip="V5Pro Remapper",
+        tooltip="Vader5Mapper",
         icon_path=_ICON_DIR / "service_connected.ico",
         disconnected_icon_path=_ICON_DIR / "service_disconnected.ico",
         menu_items=[

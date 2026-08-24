@@ -490,7 +490,17 @@ class Macros(CTkScript):
     # --- recording ---
 
     def fcmevhr_record(self):
-        if keyboard is None or self._recording or self._current_session is None:
+        if self._recording or self._current_session is None:
+            return
+        if keyboard is None:
+            from tkinter import messagebox
+            messagebox.showerror(
+                "Recording unavailable",
+                "The keyboard module failed to load, so macro recording "
+                "isn't available in this build. Reinstalling or "
+                "re-downloading the app should fix this.",
+                parent=self.window,
+            )
             return
         self._recording = True
         self._last_event_time = time.monotonic()

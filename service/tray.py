@@ -684,16 +684,16 @@ class TrayIcon:
     def update_status(self, connected: bool) -> None:
         """
         Thread-safe?: reflect controller connection state in the tray
-        tooltip and the status line at the top of the menu, which shows a
+        icon and the status line at the top of the menu, which shows a
         small green/red dot (see _MenuPopup._on_paint) rather than a
-        plain glyph.
+        plain glyph. The tooltip itself stays static (just the app
+        name) — connection state is already conveyed by the icon and
+        the menu, so it doesn't need to change too.
         Safe to call before run() – the values are just cached until the
         icon actually exists.
         """
         self._status_line = "Connected" if connected else "Disconnected"
         self._status_connected = connected
-        state = "Connected" if connected else "Disconnected"
-        self._tooltip = f"{self._base_tooltip} \u2013 {state}"[:127]
 
         if self._hwnd:
             user32.PostMessageW(
@@ -785,18 +785,6 @@ class TrayIcon:
         if self._nid is not None:
             shell32.Shell_NotifyIconW(NIM_DELETE, ctypes.byref(self._nid))
 
-    def _update_tooltip(self) -> None:
-        if self._nid is None or self._hwnd is None:
-            return
-        nid = NOTIFYICONDATA()
-        nid.cbSize = ctypes.sizeof(NOTIFYICONDATA)
-        nid.hWnd = self._hwnd
-        nid.uID = 1
-        nid.uFlags = NIF_TIP
-        nid.szTip = self._tooltip
-        shell32.Shell_NotifyIconW(NIM_MODIFY, ctypes.byref(nid))
-
-
     def _update_icon(self, connected: bool) -> None:
         if self._nid is None:
             return
@@ -856,10 +844,6 @@ class TrayIcon:
                 )
                 self._status_connected = connected
 
-                state = "Connected" if connected else "Disconnected"
-                self._tooltip = f"{self._base_tooltip} – {state}"[:127]
-
-                self._update_tooltip()
                 self._update_icon(connected)
 
                 return 0

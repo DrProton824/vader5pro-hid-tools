@@ -1,5 +1,5 @@
 """
-src/shared/vendor_init.py — Vendor HID initialization / stop commands.
+service/hid_interface/vendor_init.py — Vendor HID initialization / stop commands.
 
 Write-only helpers that open the Vader 5 Pro's vendor (0xFFA0) interface
 just long enough to send one command, then close it immediately. Used by

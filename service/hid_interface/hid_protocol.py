@@ -1,5 +1,5 @@
 """
-src/shared/hid_protocol.py — Vader 5 Pro HID report decoding.
+service/hid_interface/hid_protocol.py — Vader 5 Pro HID report decoding.
 
 Pure decode logic shared by every reader implementation (current and
 legacy): turns a raw HID report into a set of currently-pressed button

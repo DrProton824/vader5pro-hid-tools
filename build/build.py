@@ -8,12 +8,9 @@ Outputs land in  dist/VaderMapper/
   VaderService.exe   – no console window, no UAC elevation, custom icon
   VaderConfig.exe    – windowed GUI, custom icon
   config.json        – default config copied next to executables
-  assets/icons/      – service tray icons (flat, matches service/main.py's frozen-mode lookup)
-  gui/assets/        – GUI images/fonts/controller artwork, staged for VaderConfig.exe
-
-NOTE: VaderConfig.exe does not yet bundle gui/assets and gui/scripts via
-PyInstaller --add-data — running VaderConfig.exe from source works today,
-the packaged exe's asset loading is a follow-up (see PROJECT.md).
+  assets/            – single shared folder: service tray icons plus every
+                        GUI asset (controller art, hit zones, images, fonts),
+                        merged flat next to both exes
 """
 
 from __future__ import annotations
@@ -120,10 +117,7 @@ def build_config_gui() -> None:
         "VaderConfig",
         GUI_ROOT / "MainPage.py",
         CONFIG_ICON,
-        extra=[
-            "--collect-all", "customtkinter",
-            "--collect-all", "PIL",
-        ],
+        extra=["--collect-all", "customtkinter", "--collect-all", "PIL"],
     ))
 
 
@@ -135,22 +129,18 @@ def copy_runtime_files() -> None:
     if not dest_config.exists():
         shutil.copy2(CONFIG, dest_config)
 
-    # Shared assets directory for both VaderService.exe and VaderConfig.exe.
+    # Service icons and GUI assets land in the SAME flat assets/ folder
+    # next to both exes - matches service/main.py's and gui/scripts/
+    # mapping.py's/device.py's frozen-mode lookups, and the CWD-relative
+    # 'assets/...' paths CTkMaker bakes into MainPage.py (see its
+    # sys.frozen chdir). One shared folder, not assets/ + gui/assets/.
     dest_assets = DIST / "assets"
     if dest_assets.exists():
         shutil.rmtree(dest_assets)
-
-    # Copy all GUI assets into the shared assets directory.
-    if GUI_ASSETS.exists():
-        shutil.copytree(GUI_ASSETS, dest_assets)
-
-    # Add VaderService tray icons to the shared assets/icons directory.
     if SERVICE_ASSETS.exists():
-        shutil.copytree(
-            SERVICE_ASSETS / "icons",
-            dest_assets / "icons",
-            dirs_exist_ok=True,
-        )
+        shutil.copytree(SERVICE_ASSETS, dest_assets, dirs_exist_ok=True)
+    if GUI_ASSETS.exists():
+        shutil.copytree(GUI_ASSETS, dest_assets, dirs_exist_ok=True)
 
 
 def main() -> None:

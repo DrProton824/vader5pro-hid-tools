@@ -52,20 +52,35 @@ def _status_path() -> pathlib.Path:
 def _dongle_key(info: dict) -> str:
     """
     Identify one physical dongle across the 4 HID interfaces it exposes
-    under the same VID/PID. Prefers serial_number when the firmware
-    reports one; otherwise strips the "&mi_NN" interface-number segment
-    from the device path, which is the only part that differs between
-    interfaces of the same physical device (and the only part that's
-    shared between two different ones).
-    """
-    serial = info.get("serial_number")
-    if serial:
-        return str(serial)
+    under the same VID/PID, by stripping the "&mi_NN" interface-number
+    segment from the device path — the only part of the path that
+    differs between interfaces of the same physical device (and the
+    only part shared between two different ones).
 
+    serial_number is deliberately NOT used here: some interfaces of the
+    same physical dongle report it and others don't (a real hidapi/
+    Windows quirk on this device), which produced two dropdown entries
+    for one dongle — "Flydigi Vader 5 Pro" and "Controller (Flydigi
+    Vader 5 Pro)" — instead of merging them.
+    """
     path = info.get("path") or b""
     if isinstance(path, str):
         path = path.encode("utf-8", errors="ignore")
     return _MI_SUFFIX.sub(b"", path.lower()).decode(errors="ignore")
+
+
+def _pick_display_info(members: list[dict]) -> dict:
+    """
+    Different interfaces of the same dongle can report different
+    product_string values — Windows auto-generates "Controller (<name>)"
+    for the XInput-style interface, while the vendor interface reports
+    the plain name. Prefer whichever candidate's name has no parens.
+    """
+    for info in members:
+        name = info.get("product_string") or ""
+        if name and "(" not in name:
+            return info
+    return members[0]
 
 
 def _enumerate_dongles() -> list[dict]:
@@ -77,10 +92,11 @@ def _enumerate_dongles() -> list[dict]:
     except Exception:
         return []
 
-    seen: dict[str, dict] = {}
+    groups: dict[str, list[dict]] = {}
     for info in candidates:
-        seen.setdefault(_dongle_key(info), info)
-    return list(seen.values())
+        groups.setdefault(_dongle_key(info), []).append(info)
+
+    return [_pick_display_info(members) for members in groups.values()]
 
 
 def write(connected: bool, battery: Optional[int] = None) -> None:

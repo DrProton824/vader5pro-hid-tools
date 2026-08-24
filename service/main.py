@@ -1,5 +1,5 @@
 """
-src/service/main.py — VaderService – background remapper process.
+service/main.py — VaderService – background remapper process.
 
 Startup sequence
 ────────────────
@@ -130,7 +130,7 @@ def main() -> None:
     # interface stays completely silent without it). Sent unconditionally
     # at startup and stopped at shutdown; no longer toggleable from the
     # tray to keep the context menu simple. The underlying setting still
-    # lives in config.json (see src/shared/config.py) so a future GUI
+    # lives in config.json (see shared/config.py) so a future GUI
     # settings screen can flip it – that just requires restarting the
     # service to take effect for now.
     send_vendor_init = bool(settings.get("vendor_initialization", True))

@@ -1,5 +1,5 @@
 """
-src/shared/tray.py — Minimal Win32 system tray icon for VaderService
+service/tray.py — Minimal Win32 system tray icon for VaderService
 
 Why hand-rolled ctypes instead of pystray / infi.systray?
 ─────────────────────────────────────────────────────────
@@ -175,15 +175,16 @@ def _rgb(r: int, g: int, b: int) -> int:
     return r | (g << 8) | (b << 16)
 
 
-# Palette mirrors src/config_gui/main.py's C dict, so the tray menu
-# reads as part of the same app rather than a bare system menu.
+# Palette mirrors the GUI's own color scheme (see gui/scripts/ui_utils.py
+# and the literal hex values in gui/MainPage.py), so the tray menu reads
+# as part of the same app rather than a bare system menu.
 _COLOR_SURFACE = _rgb(0x2B, 0x2B, 0x2B)
 _COLOR_SELECTED = _rgb(0x35, 0x35, 0x35)   # hover fill, no separate hover text color
 _COLOR_TEXT = _rgb(0xF2, 0xF2, 0xF2)
 _COLOR_TEXT_DIM = _rgb(0x78, 0x78, 0x78)   # status text + disabled items
 _COLOR_BORDER = _rgb(0x3E, 0x3E, 0x3E)
 _COLOR_STATUS_ON = _rgb(0x53, 0xD0, 0x10)
-_COLOR_STATUS_OFF = _rgb(0xD0, 0x46, 0x46)  # unchanged, not covered by the design
+_COLOR_STATUS_OFF = _rgb(0x72, 0x2F, 0x35)  # same red as the app's Cancel/Stop buttons
 
 
 class WNDCLASS(ctypes.Structure):
@@ -689,7 +690,7 @@ class TrayIcon:
         Safe to call before run() – the values are just cached until the
         icon actually exists.
         """
-        self._status_line = "Controller connected" if connected else "Controller disconnected"
+        self._status_line = "Connected" if connected else "Disconnected"
         self._status_connected = connected
         state = "Connected" if connected else "Disconnected"
         self._tooltip = f"{self._base_tooltip} \u2013 {state}"[:127]
@@ -849,9 +850,9 @@ class TrayIcon:
                 connected = bool(wparam)
 
                 self._status_line = (
-                    "Controller connected"
+                    "Connected"
                     if connected
-                    else "Controller disconnected"
+                    else "Disconnected"
                 )
                 self._status_connected = connected
 

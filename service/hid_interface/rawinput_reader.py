@@ -1,5 +1,5 @@
 """
-src/shared/rawinput_reader.py -- Raw Input based HID reader thread
+service/hid_interface/rawinput_reader.py -- Raw Input based HID reader thread
 
 Why Windows Raw Input instead of hidapi?
 ─────────────────────────────────────────

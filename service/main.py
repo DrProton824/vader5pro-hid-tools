@@ -1,6 +1,9 @@
-"""
-service/main.py — VaderService – background remapper process.
+#
+# service/main.py
+# VaderService – background remapper process.
+#
 
+"""
 Startup sequence
 ────────────────
 1. Grab the single-instance mutex – exit immediately (with a message box)

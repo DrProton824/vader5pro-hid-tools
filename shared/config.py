@@ -300,6 +300,25 @@ def save_settings(settings: Settings) -> None:
     save_config(data)
 
 
+def get_automation_targets() -> tuple[dict[str, str], dict[str, str]]:
+    """Return (hotkeys_by_profile, exe_by_profile) for every profile with
+    automation enabled -- consumed by the service's hotkey/foreground
+    watchers (see service/automation/)."""
+    hotkeys: dict[str, str] = {}
+    exes: dict[str, str] = {}
+    for profile in get_profiles():
+        automation = profile.get("automation", {})
+        if not automation.get("enabled"):
+            continue
+        hotkey = profile.get("hotkey", "")
+        if hotkey:
+            hotkeys[profile["id"]] = hotkey
+        exe = automation.get("exe", "")
+        if exe:
+            exes[profile["id"]] = exe
+    return hotkeys, exes
+
+
 class ConfigWatcher:
     """
     Lightweight mtime-based config change detector.

@@ -1,16 +1,36 @@
-"""
-Build both executables with PyInstaller.
+#
+# build/build.py
+# Build both executables with PyInstaller.
+#
 
+"""
 Run from the repo root:
     python build/build.py
 
-Outputs land in  dist/VaderMapper/
+Outputs land in dist/VaderMapper/
   VaderService.exe   – no console window, no UAC elevation, custom icon
   VaderConfig.exe    – windowed GUI, custom icon
   config.json        – default config copied next to executables
   assets/            – single shared folder: service tray icons plus every
-                        GUI asset (controller art, hit zones, images, fonts),
-                        merged flat next to both exes
+                       GUI asset (controller art, hit zones, images, fonts),
+                       merged flat next to both exes
+
+Version stamping
+────────────────
+VERSION_FILE (service/version.py) is overwritten with the BUILD_VERSION env
+var just before building, then restored afterwards so the repo's working tree
+stays clean. Falls back to "dev" if BUILD_VERSION is unset (local builds).
+
+Asset layout
+────────────
+Service icons and GUI assets land in the same flat assets/ folder next to both
+exes — matching service/main.py and gui frozen-mode path lookups. One shared
+folder, not assets/ + gui/assets/.
+
+Excluded modules
+────────────────
+legacy_hid_reader is excluded from the service build — it's a reference
+implementation only, replaced by rawinput_reader.RawInputReaderThread.
 """
 
 from __future__ import annotations

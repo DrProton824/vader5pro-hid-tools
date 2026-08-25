@@ -88,6 +88,8 @@ DEFAULT_TEXT_COLOR = "#7DABC3"  # distinguishes the non-removable Default profil
 EXE_FILETYPES = [("Programs", "*.exe *.lnk"), ("All files", "*.*")]
 EXE_PLACEHOLDER = "No program selected"  # shown in fcpeeos_combobox2 in place of CTkComboBox's missing placeholder_text support
 
+def _automation_status_text(is_on: bool) -> str:
+    return "ON" if is_on else "OFF (default)"
 
 def _default_profile() -> Dict[str, Any]:
     return {
@@ -372,10 +374,12 @@ class Profiles(CTkScript):
         # name can't be changed out from under fcgi_profile/mapping.py.
         self.window.fcpeenn_entry1.configure(state="disabled" if is_default else "normal")
 
-        if session["automation"]["enabled"]:
+        automation_enabled = session["automation"]["enabled"]
+        if automation_enabled:
             self.window.fcpeeos_switch1.select()
         else:
             self.window.fcpeeos_switch1.deselect()
+        self.window.fcpeeos_label1.configure(text=_automation_status_text(automation_enabled))
 
         self._current_exe_path = session["automation"]["exe"]
         self.window.fcpeeos_combobox2.set(Path(self._current_exe_path).name if self._current_exe_path else EXE_PLACEHOLDER)
@@ -448,16 +452,8 @@ class Profiles(CTkScript):
     # --- profile edit panel ---
 
     def fcpeeos_switch1(self):
-        # No live behavior here — state is read directly from the widget
-        # on save. Intended contract for VaderService.exe: while polling
-        # for a running process, match a candidate's *basename*
-        # (Path(exe).name) against automation["exe"] for every profile
-        # with automation["enabled"] True — not full-path equality,
-        # since the path browsed to on this machine may not match where
-        # the process actually reports running from — and on a match,
-        # persist that profile's id into config.json's "active_profile"
-        # the same way fcgi_profile does here (see _set_active_profile).
-        pass
+        enabled = bool(self.window.fcpeeos_switch1.get())
+        self.window.fcpeeos_label1.configure(text=_automation_status_text(enabled))
 
     def fcpeeos_combobox2(self, val: str):
         pass  # browsing is driven by _open_exe_browser via the <Button-1> binding in on_start

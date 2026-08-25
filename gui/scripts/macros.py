@@ -370,23 +370,31 @@ class Macros(CTkScript):
         list_frame = self.window.fcmevm_macroactions
         for child in list_frame.winfo_children():
             child.destroy()
-
+    
         self._action_list.buttons = {}
         self._action_list.order = []
         self._action_list.selected = set()
         self._action_list.anchor = None
         self._action_by_key = {}
-
+    
         for action in self._draft_actions:
             key = uuid.uuid4().hex
             self._action_by_key[key] = action
-            self._action_list.add(key, self._describe_action(action))
+            self._action_list.add_batch(key, self._describe_action(action))
+        
+        self._action_list.relayout()
 
     def _append_new_actions(self) -> None:
-        for action in self._draft_actions[len(self._action_list.order):]:
+        new_actions = self._draft_actions[len(self._action_list.order):]
+        if not new_actions:
+            return
+        
+        for action in new_actions:
             key = uuid.uuid4().hex
             self._action_by_key[key] = action
-            self._action_list.add(key, self._describe_action(action))
+            self._action_list.add_batch(key, self._describe_action(action))
+        
+        self._action_list.relayout()
 
     @staticmethod
     def _describe_action(action: Dict[str, Any]) -> str:

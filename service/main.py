@@ -11,9 +11,10 @@ Startup sequence
 2. Load config.
 3. Build mapper + input sender.
 4. Start the HID reader thread.
-5. Start a background thread that checks for config file changes every
+5. Start the profile automation watchers (hotkey + foreground window).
+6. Start a background thread that checks for config file changes every
    ~500 ms and reloads on change.
-6. Create a tray icon and pump its message loop on the main thread until
+7. Create a tray icon and pump its message loop on the main thread until
    the user picks "Exit".
 
 There is intentionally:
@@ -23,6 +24,21 @@ There is intentionally:
 v1.1 adds a tray icon and a single-instance guard – both were previously
 listed as "not in v1" but are needed for this to feel like a real
 background service instead of an untraceable, unstoppable process.
+
+Profile automation
+───────────────────
+Each profile can optionally carry a hotkey and/or a "start with program"
+executable (see shared/config.py's get_automation_targets()). Two
+dedicated threads under service/automation/ watch for those triggers
+and flip active_profile even while the GUI is closed:
+
+  - HotkeyWatcherThread: registers a Win32 RegisterHotKey per profile,
+    event-driven, no polling.
+  - ForegroundWatcherThread: hooks EVENT_SYSTEM_FOREGROUND, switches
+    profile when the assigned program becomes the active window.
+
+Both are reloaded whenever ConfigWatcher sees config.json change, same
+as the button mapper's bindings.
 """
 
 from __future__ import annotations
@@ -75,6 +91,8 @@ from service.hid_interface.rawinput_reader import RawInputReaderThread
 from service.mapping.input_sender import InputSender
 from service.mapping.macro_player import MacroPlayer
 from service.mapping.mapper import ButtonMapper
+from service.automation.hotkey_watcher import HotkeyWatcherThread
+from service.automation.foreground_watcher import ForegroundWatcherThread
 from service.tray import TrayIcon
 
 # How often the config-watcher thread wakes to check for changes.
@@ -127,15 +145,27 @@ def main() -> None:
         # always None here until a report byte is identified for it.
         status_writer.write(connected=connected, battery=None)
 
-    # Vendor initialization/stop sequence – required on profiles that have no
-    # macro/extra button currently assigned in the Flydigi software
-    # (confirmed via tools/hid_vendor_init.py: the vendor 0xFFA0
-    # interface stays completely silent without it). Sent unconditionally
-    # at startup and stopped at shutdown; no longer toggleable from the
-    # tray to keep the context menu simple. The underlying setting still
-    # lives in config.json (see shared/config.py) so a future GUI
-    # settings screen can flip it – that just requires restarting the
-    # service to take effect for now.
+    # ── Profile automation (hotkey + "start with program") ───────────────────
+
+    def _switch_profile(profile_id: str) -> None:
+        if cfg.get_active_profile() == profile_id:
+            return
+        cfg.set_active_profile(profile_id)
+        mapper.update_bindings(cfg.load_bindings())
+
+    hotkeys_by_profile, exe_by_profile = cfg.get_automation_targets()
+
+    hotkey_watcher = HotkeyWatcherThread(on_trigger=_switch_profile)
+    hotkey_watcher.reload(hotkeys_by_profile)
+    hotkey_watcher.start()
+
+    foreground_watcher = ForegroundWatcherThread(on_match=_switch_profile)
+    foreground_watcher.reload(exe_by_profile)
+    foreground_watcher.start()
+
+    # Vendor init/stop sequence required for profiles without assigned
+    # Flydigi macros/buttons. Sent at service start/stop; controlled via
+    # config.json for future GUI support.
     send_vendor_init = bool(settings.get("vendor_initialization", True))
 
     reader = RawInputReaderThread(
@@ -154,6 +184,9 @@ def main() -> None:
             time.sleep(CONFIG_POLL_INTERVAL)
             if watcher.changed():
                 mapper.update_bindings(cfg.load_bindings())
+                hotkeys_by_profile, exe_by_profile = cfg.get_automation_targets()
+                hotkey_watcher.reload(hotkeys_by_profile)
+                foreground_watcher.reload(exe_by_profile)
 
     watcher_thread = threading.Thread(
         target=_watch_config,
@@ -184,6 +217,8 @@ def main() -> None:
     def _quit() -> None:
         stop_event.set()
         reader.stop()
+        hotkey_watcher.stop()
+        foreground_watcher.stop()
         icon_holder["icon"].stop()
 
     icon = TrayIcon(
@@ -203,6 +238,8 @@ def main() -> None:
     finally:
         stop_event.set()
         reader.stop()
+        hotkey_watcher.stop()
+        foreground_watcher.stop()
         reader.join(timeout=2.0)
 
 

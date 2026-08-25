@@ -71,12 +71,31 @@ def _save_settings(settings: Dict[str, Any]) -> None:
     _write_config(data)
 
 
+def _find_service_exe() -> Path | None:
+    """Locate the service exe next to this one by content, not filename,
+    so renaming either .exe (keeping both in the same folder) still works.
+    Falls back to VaderService.exe as a tie-breaker if more than one other
+    .exe is present."""
+    self_path = Path(sys.executable).resolve()
+    folder = self_path.parent
+    candidates = [p for p in folder.glob("*.exe") if p.resolve() != self_path]
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+    for p in candidates:
+        if p.name.lower() == "vaderservice.exe":
+            return p
+    return candidates[0]
+
+
 def _service_exe_path() -> str:
     if getattr(sys, "frozen", False):
         # Both onefile exes land flat in the same dist folder - sys.executable
         # is this exe's own real path (unlike __file__, which points inside
         # PyInstaller's temp extraction dir for a frozen build).
-        return f'"{Path(sys.executable).resolve().parent / "VaderService.exe"}"'
+        service_exe = _find_service_exe() or (Path(sys.executable).resolve().parent / "VaderService.exe")
+        return f'"{service_exe}"'
     # Running from source: no built exe exists yet, so autostart launches
     # the service module directly instead.
     repo_root = Path(__file__).resolve().parents[2]

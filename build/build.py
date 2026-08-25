@@ -44,7 +44,6 @@ import os
 
 ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist" / "VaderMapper"
-CONFIG = ROOT / "config.json"
 
 SERVICE_ROOT = ROOT / "service"
 SERVICE_ASSETS = SERVICE_ROOT / "assets"
@@ -147,11 +146,6 @@ def build_config_gui() -> None:
 
 def copy_runtime_files() -> None:
     DIST.mkdir(parents=True, exist_ok=True)
-
-    # Only copy default config if the user does not already have one
-    dest_config = DIST / "config.json"
-    if not dest_config.exists():
-        shutil.copy2(CONFIG, dest_config)
 
     # Service icons and GUI assets land in the SAME flat assets/ folder
     # next to both exes - matches service/main.py's and gui/scripts/

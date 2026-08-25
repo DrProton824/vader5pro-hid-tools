@@ -645,6 +645,26 @@ def bind_hotkey_capture(window, entry, on_captured=None) -> None:
             pass
 
 
+try:
+    import keyboard as _keyboard
+except ImportError:
+    _keyboard = None
+
+
+def _resolve_scan_code(label: str) -> int | None:
+    """Translate a captured key label to the same hardware scan code
+    `keyboard.hook()` reports during recording (macros.py's _on_key_event).
+    Scan codes must come from the `keyboard` library's own table.
+    """
+    if _keyboard is None:
+        return None
+    try:
+        codes = _keyboard.key_to_scan_codes(label.lower())
+        return codes[0] if codes else None
+    except (ValueError, KeyError):
+        return None
+
+
 def bind_single_key_capture(window, entry, on_captured=None):
     """Single physical key capture for macro press/release fields.
     Returns `arm(placeholder)` function to start capture. entry._is_placeholder tracks hint vs confirmed value."""
@@ -706,7 +726,7 @@ def bind_single_key_capture(window, entry, on_captured=None):
         else:
             label = _hotkey_label(keysym)
 
-        _finalize(label, event.keycode)
+        _finalize(label, _resolve_scan_code(label))
         return "break"
 
     def _on_release(event):
@@ -719,7 +739,8 @@ def bind_single_key_capture(window, entry, on_captured=None):
             # If all modifiers release without another key, capture that modifier alone
             # (e.g. a standalone "press Shift" action). If multiple were held, capture the first.
             if not state["held"] and state["peak"]:
-                _finalize(_hotkey_label(state["peak"][0]), event.keycode)
+                modifier_label = _hotkey_label(state["peak"][0])
+                _finalize(modifier_label, _resolve_scan_code(modifier_label))
             return "break"
         return None
 

@@ -441,6 +441,23 @@ class SelectableList:
         self.relayout()
         return button
 
+    def add_batch(self, key: str, text: str, pinned: bool = False) -> Any:
+        """Same as add(), but skips relayout() — caller must call relayout() manually after batch is done."""
+        button = self._make_button(self.list_frame, text)
+        button.bind("<ButtonPress-1>", lambda e, k=key: self._on_press(e, k), add="+")
+        button.bind("<B1-Motion>", self._on_motion, add="+")
+        button.bind("<ButtonRelease-1>", self._on_release, add="+")
+        button.bind("<Double-Button-1>", lambda e, k=key: self._open(k), add="+")
+
+        self.buttons[key] = button
+        if pinned:
+            self.pinned.add(key)
+            self.order.insert(0, key)
+        else:
+            self.order.append(key)
+
+        return button  # No relayout() call here
+      
     def remove(self, key: str) -> None:
         button = self.buttons.pop(key, None)
         if button is not None:

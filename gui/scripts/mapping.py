@@ -156,7 +156,9 @@ class Mapping(CTkScript):
         self.window.__dict__.setdefault("_profile_change_listeners", []).append(
             self._on_active_profile_changed
         )
+        self.window.__dict__.setdefault("_page_show_listeners", []).append(self._on_page_shown)
 
+        self._prune_invalid_macro_assignments()
         self._refresh_assignment_dots()
 
     # --- button selection ---
@@ -205,6 +207,30 @@ class Mapping(CTkScript):
         self.window.fcgafskk_entry.delete(0, "end")
         self.window.fcgafsmm_combobox.set("")
         self._refresh_assignment_dots()
+
+    def _on_page_shown(self, page_name: str) -> None:
+        if page_name == "fc_mapping":
+            self._prune_invalid_macro_assignments()
+
+    def _prune_invalid_macro_assignments(self) -> None:
+        """Drop macro assignments (in every profile) whose macro no longer
+        exists — e.g. deleted from the Macros tab after being assigned here."""
+        valid_names = set(_get_macro_names())
+        data = _read_config()
+        changed = False
+        for profile in data.get("profiles", []):
+            mapping = profile.get("mapping", {})
+            for button in list(mapping.keys()):
+                assignment = mapping[button]
+                if assignment.get("type") == "macro" and assignment.get("value") not in valid_names:
+                    del mapping[button]
+                    changed = True
+        if not changed:
+            return
+        _write_config(data)
+        self._refresh_assignment_dots()
+        if self._selected_button is not None:
+            self._load_assignment()
 
     def _active_profile(self) -> Optional[Dict[str, Any]]:
         data = _read_config()

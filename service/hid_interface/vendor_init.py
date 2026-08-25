@@ -1,18 +1,24 @@
-"""
-service/hid_interface/vendor_init.py — Vendor HID initialization / stop commands.
+#
+# service/hid_interface/vendor_init.py
+# Vendor HID initialization and stop commands.
+#
 
+"""
+Purpose
+───────
 Write-only helpers that open the Vader 5 Pro's vendor (0xFFA0) interface
 just long enough to send one command, then close it immediately. Used by
 rawinput_reader.py to send the recovered vendor initialization sequence
 that puts the vendor interface into reporting mode, and the matching
 stop sequence on shutdown.
 
+Why write-only
+──────────────
 Never reads from the device, so it can't race Raw Input (or Flydigi
 SpaceStation) for incoming reports the way a blocking hidapi read would.
 """
 
 from __future__ import annotations
-
 from typing import Optional
 
 import hid  # pip install hid

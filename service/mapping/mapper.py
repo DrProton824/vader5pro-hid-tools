@@ -1,6 +1,11 @@
-"""
-Mapping engine – the bridge between HID events and key injection.
+#
+# service/mapping/mapper.py
+# Mapping engine – the bridge between HID events and key injection.
+#
 
+"""
+Purpose
+───────
 This module knows nothing about HID reports. It knows nothing about Win32
 SendInput. It only translates ButtonEvent objects into either press/release
 calls on an InputSender (keybind assignments) or a MacroPlayer.play() call

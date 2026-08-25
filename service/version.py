@@ -1,11 +1,14 @@
-"""
-Build-time version stamp.
+#
+# service/version.py
+# Build-time version stamp.
+#
 
-VERSION is normally overwritten by build/build.py right before each
-PyInstaller build (see the BUILD_VERSION env var it reads), then
-restored back to "dev" afterwards so the repo's working tree stays
-clean. Running from source without going through build.py simply shows
-"dev", making it obvious this isn't a packaged release.
+"""
+VERSION
+  Normally overwritten by build/build.py right before each PyInstaller build
+  (via BUILD_VERSION env var), then restored to "dev" afterwards to keep the
+  repo's working tree clean. Running from source shows "dev", making it obvious
+  this isn't a packaged release.
 """
 
 VERSION = "dev"

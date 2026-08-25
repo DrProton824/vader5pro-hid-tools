@@ -1,6 +1,11 @@
-"""
-Macro playback via Win32 SendInput scancodes.
+#
+# service/mapping/macro_player.py
+# Macro playback via Win32 SendInput scancodes.
+#
 
+"""
+Recording and playback
+──────────────────────
 Macro actions are recorded by the GUI's macros.py using the `keyboard`
 library, which reports hardware scan codes rather than virtual-key
 names. Replaying by scan code (KEYEVENTF_SCANCODE) sidesteps needing a
@@ -8,12 +13,15 @@ second name-to-VK table that would have to agree with keyboard's naming
 exactly — each action is just replayed with the same scan code it was
 captured with.
 
-Known limitation: the recorder does not currently store whether a key
-was an extended key (arrow cluster, navigation cluster, right-side
-Ctrl/Alt, ...), so those are replayed without KEYEVENTF_EXTENDEDKEY and
-may not register correctly. Regular letters, digits, F-keys and
-left-side modifiers are unaffected.
+Known limitation
+────────────────
+The recorder does not currently store whether a key was an extended key
+(arrow cluster, navigation cluster, right-side Ctrl/Alt, ...), so those
+are replayed without KEYEVENTF_EXTENDEDKEY and may not register correctly.
+Regular letters, digits, F-keys and left-side modifiers are unaffected.
 
+Threading
+─────────
 Each play() call runs on its own daemon thread so a macro's "wait"
 actions never block the HID reader thread — other buttons keep working
 while a macro is mid-playback. MAX_CONCURRENT_MACROS caps how many can

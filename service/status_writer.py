@@ -1,24 +1,41 @@
+#
+# service/status_writer.py
+# Write status.json for the GUI to read.
+#
+
 """
-Writes status.json for the GUI to read (see gui/scripts/device.py).
+Purpose
+───────
+Writes status.json (read by gui/scripts/device.py) with the actively tracked
+controller's connection state and battery level. Kept as a small, focused writer
+rather than folded into main.py so the service's core startup flow stays readable.
 
-Kept as a small, focused writer rather than folded into main.py so the
-service's core startup flow stays readable. Called from the HID reader's
-connection-change callback — never polled, since status.json only needs
-to change when the underlying state actually does; the GUI does its own
-periodic re-read (STATUS_POLL_MS in device.py).
+Called from the HID reader's connection-change callback — never polled, since
+status.json only needs to change when the underlying state actually does. The GUI
+does its own periodic re-read (STATUS_POLL_MS in device.py).
 
-Scope note: only the single controller RawInputReaderThread actively
-streams from gets a live connected/battery state. Any other Vader 5 Pro
-dongles enumerated at the same time are listed too (so the GUI's device
-dropdown reflects reality when more than one is plugged in), but
-remapping more than one controller at once isn't implemented — see
-PROJECT.md.
+Multi-dongle handling
+─────────────────────
+Only the single controller RawInputReaderThread actively streams from gets a live
+connected/battery state. Any other Vader 5 Pro dongles enumerated at the same time
+are listed too (so the GUI's device dropdown reflects reality), but remapping more
+than one controller at once isn't implemented — see PROJECT.md.
 
-Battery: no HID report byte has been decoded for it yet (see
-docs/Wireless_HID_ReverseEngineering.md), so it's always written as
-None today. Once decoded, wire the real value through the `battery`
-parameter here instead of changing gui/scripts/device.py — it already
-treats a missing/non-numeric battery as blank.
+Dongle identification
+─────────────────────
+Different HID interfaces of the same physical dongle report inconsistent serial
+numbers (vendor interfaces report "Flydigi Vader 5 Pro", XInput-compatible reports
+"FLYDIGI_VADER_5_PRO"). We key off a normalized (lowercased, alphanumeric-only)
+version to merge them. This isn't a truly unique per-unit ID (it's the model name),
+so two real Vader 5 Pro dongles would collapse into one dropdown entry — acceptable
+since multi-controller remapping isn't implemented anyway.
+
+Battery decoding
+────────────────
+No HID report byte has been decoded for battery yet (see
+docs/Wireless_HID_ReverseEngineering.md), so it's always written as None today.
+Once decoded, wire the real value through the `battery` parameter here instead of
+changing gui/scripts/device.py — it already treats missing/non-numeric battery as blank.
 """
 
 from __future__ import annotations

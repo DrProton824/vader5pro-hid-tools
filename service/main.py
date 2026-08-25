@@ -197,15 +197,32 @@ def main() -> None:
 
     # ── Tray icon ─────────────────────────────────────────────────────────────
 
+    def _find_config_exe() -> pathlib.Path | None:
+        """Locate the GUI exe next to this one by content, not filename,
+        so renaming either .exe (keeping both in the same folder) still
+        works. Falls back to VaderConfig.exe as a tie-breaker if more
+        than one other .exe is present."""
+        self_path = pathlib.Path(sys.executable).resolve()
+        candidates = [p for p in _ROOT.glob("*.exe") if p.resolve() != self_path]
+        if not candidates:
+            return None
+        if len(candidates) == 1:
+            return candidates[0]
+        for p in candidates:
+            if p.name.lower() == "vaderconfig.exe":
+                return p
+        return candidates[0]
+   
     def _open_config() -> None:
-        config_exe = _ROOT / "VaderConfig.exe"
+        config_exe = _find_config_exe()
         try:
-            if config_exe.exists():
+            if config_exe is not None:
                 subprocess.Popen([str(config_exe)], cwd=str(_ROOT))
             else:
-                # Running from source – fall back to launching the module.
-                # MainPage.py lives under gui/, so both the script path and
-                # the cwd it runs from need to point there, not at _ROOT.
+                # Running from source, or no companion .exe found – fall
+                # back to launching the module directly. MainPage.py lives
+                # under gui/, so both the script path and the cwd it runs
+                # from need to point there, not at _ROOT.
                 gui_main = _ROOT / "gui" / "MainPage.py"
                 subprocess.Popen(
                     [sys.executable, str(gui_main)],

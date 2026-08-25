@@ -1,6 +1,11 @@
-"""
-Legacy hidapi-based HID reader.
+#
+# service/hid_interface/legacy_hid_reader.py
+# Legacy hidapi-based HID reader (deprecated).
+#
 
+"""
+Status
+──────
 Deprecated for the Windows service path: replaced by
 rawinput_reader.RawInputReaderThread.
 
@@ -8,6 +13,18 @@ This module is kept as a reference implementation of the hidapi approach.
 It documents the direct HID read model, vendor interface selection, report
 decoding, and event generation flow. Do not run both readers against the
 same controller at the same time.
+
+Why this approach was replaced
+──────────────────────────────
+hidapi's blocking device.read() consumes reports from the HID interface,
+which can race with other readers such as Flydigi SpaceStation. In practice
+this caused competing readers to miss packets or starve each other.
+
+The exclusive read model means only one process can successfully read from
+the vendor interface at a time. If the official Flydigi software is running,
+this reader may receive no data, or vice versa. Raw Input (the replacement)
+uses a broadcast model where every registered process receives its own copy
+of reports, eliminating the contention.
 
 Responsibilities
 ────────────────
@@ -26,8 +43,8 @@ Design choices
 - Callbacks execute on the reader thread; the mapper must not perform slow
   work inside them.
 
-Picking the right interface
-────────────────────────────
+Interface selection
+───────────────────
 The controller exposes multiple HID interfaces under the same VID/PID
 (an XInput passthrough interface plus a vendor-specific interface).
 

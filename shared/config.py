@@ -1,16 +1,42 @@
+#
+# shared/config.py
+# Config file read/write for profiles, macros and settings.
+#
+
 """
-Config file read / write.
+Schema
+──────
+  {
+    "active_profile": "<id>",
+    "profiles": [{"id", "name", "mapping": {button: {"type": "keybind"|"macro", "value": "..."}}, "automation", "hotkey"}],
+    "macros":   [{"name", "actions": [...]}],
+    "settings": {"vendor_initialization", "autostart", "close_to_tray"}
+  }
 
-Schema: {"active_profile": "<id>", "profiles": [...], "macros": [...], "settings": {...}}.
-Each profile is {"id", "name", "mapping": {button: {"type": "keybind"|"macro", "value": "..."}}, "automation", "hotkey"}.
+Reading
+───────
+load_config() returns the full config, migrating a legacy/incomplete file on read.
+load() returns only the active profile's keybind assignments as a flat {button: shortcut}
+dict — macro assignments resolve to "" since they aren't directly playable by InputSender.
+load_bindings() returns the full active profile assignments including resolved macro action
+lists, for callers (ButtonMapper) that need both types.
 
-load()/load_settings() stay flat-shaped for VaderService.exe: they resolve the active
-profile and, for load(), project only its keybind-type assignments into the old
-{button: shortcut} dict — macro assignments aren't playable by the service yet.
+Migration
+─────────
+_migrate() handles: backfilling profile ids, guaranteeing a Default profile always
+exists, repairing a dangling active_profile pointer, and folding a pre-migration flat
+{"M1": "f13", ...} config into the profile schema. Runs transparently on read;
+migrated data is written back immediately.
 
-Atomic write (write to .tmp, rename) so a crash never corrupts the file. The service
-detects changes via mtime polling rather than inotify/ReadDirectoryChangesW so the
-implementation stays identical on every Python runtime without extra deps.
+Writing
+───────
+Atomic write (write to .tmp, rename) so a crash never corrupts the file.
+
+Change detection
+────────────────
+ConfigWatcher uses mtime polling rather than inotify/ReadDirectoryChangesW so the
+implementation stays identical on every Python runtime without extra dependencies.
+The service polls once per loop iteration via ConfigWatcher.changed().
 """
 
 from __future__ import annotations

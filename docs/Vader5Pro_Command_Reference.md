@@ -32,6 +32,7 @@ Evidence levels:
 | `0x12` | Host → Device | Rumble | **Confirmed / Established** |
 | `0xA2` | Host → Device | Profile selection | **Established** |
 | `0xEF` | Device → Host | Extended controller input | **Confirmed / Established** |
+| `0xA8` / `0xA9` | Host ↔ Device | LED configuration | **Established externally** |
 
 ---
 
@@ -190,19 +191,34 @@ Rumble command:
 
 Where:
 
-- `SS` = strong motor intensity
-- `WW` = weak motor intensity
+- `SS` = strong/heavy rumble motor intensity
+- `WW` = weak/light rumble motor intensity
 - Range: `0x00–0xFF`
+
+The Vader 5 Pro has two physically different rumble motors:
+
+- One produces a heavier, stronger, lower-frequency vibration.
+- The other produces a lighter, higher-frequency vibration.
+
+Direct hardware testing confirms that the two channels can be driven
+independently and produce clearly different physical responses.
+
+The protocol fields therefore represent **two independent motor channels**
+rather than simply a single rumble intensity value.
 
 Examples:
 
+    5A A5 12 06 FF 00 00 00 00 00
+    5A A5 12 06 00 FF 00 00 00 00
     5A A5 12 06 FF FF 00 00 00 00
     5A A5 12 06 00 00 00 00 00 00
 
-Your direct testing confirms variable intensity control.
+The exact physical left/right assignment of `SS` and `WW` should be
+verified separately; the important confirmed distinction is that the two
+channels drive the two different motor types.
 
 `padctl` independently implements the same Vader 5 Pro output structure
-using `strong` and `weak` fields.
+using separate `strong` and `weak` motor fields.
 
 **Status: Confirmed / Established.**
 
@@ -265,6 +281,61 @@ mapping.
 
 ---
 
+## `0xA8` / `0xA9` — LED Configuration
+
+ControlLab independently recovered the Vader 5 USB lighting protocol and
+checked its implementation against the official Flydigi Space Station
+4.2.0.9 controller library.
+
+The lighting protocol uses New XInput `0xA8` / `0xA9` chunk packets.
+
+Known configurable lighting properties include:
+
+- LED effect / mode
+- Brightness
+- Animation cycle time
+- Color data
+- Multiple colors for supported effects
+
+Known effect types include:
+
+- Default
+- Flow
+- Breathing
+- Feedback
+- Gradient
+- Steady
+- Off
+
+The exact packet/chunk layout and field offsets are not yet included here.
+
+This is a separate configuration protocol from the normal `5A A5`
+controller input/rumble commands.
+
+**Status: Established externally; not yet locally tested.**
+
+---
+
+## Battery Status
+
+No battery-status packet or field has yet been established with sufficient
+confidence.
+
+Potential candidates include fields in the existing `0x01`, `0x02`,
+`0x04`, or `0xA1` responses, but none should currently be labelled as
+battery data without controlled testing.
+
+Useful future tests:
+
+- Capture the same response at substantially different battery levels.
+- Compare controller connected/disconnected states.
+- Compare charging vs. not charging, if applicable.
+- Look for fields that change while all controller inputs remain unchanged.
+
+**Status: Open investigation.**
+
+---
+
 ## Connection Initialization
 
 Direct USBPcap captures show the following sequence:
@@ -323,9 +394,10 @@ for the Vader 5 Pro.
 | Extended input disable | `0x11` | **Confirmed** |
 | Rumble | `0x12` | **Confirmed** |
 | Profile selection | `0xA2` | **Established** |
+| LED configuration | `0xA8` / `0xA9` | **Established externally** |
 
-Additional output functions may exist but have not yet been sufficiently
-identified.
+Additional vendor output functions may exist but have not yet been
+sufficiently identified.
 
 ---
 
@@ -354,6 +426,8 @@ the HID interfaces / corresponding HID communication.
 | `0x04` payload fields | Unknown |
 | `0x10` function | Unknown |
 | `0xA2` complete profile table | Partially documented |
+| `0xA8` / `0xA9` exact LED packet layout | Known externally, not yet locally mapped |
+| Battery status / battery field | Unknown |
 | `0x81` capdata | Unknown |
 | Additional vendor output commands | Unknown |
 
@@ -363,7 +437,8 @@ the HID interfaces / corresponding HID communication.
 
 - `BANANASJIM/padctl` — Linux HID/gamepad implementation with a dedicated
   Vader 5 Pro device definition and working extended-input/rumble handling.
-- `dracinn/ControlLab` — independent Vader 5 Pro protocol implementation.
+- `dracinn/ControlLab` — independent Vader 5 Pro protocol implementation,
+  including recovered USB LED configuration.
 - `vader5pro-remap-driver` — independent Vader 5 Pro protocol and mapping
   implementation.
 

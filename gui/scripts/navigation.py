@@ -113,6 +113,8 @@ class Navigation(CTkScript):
             show_frame(frame) if page == page_name else hide_frame(frame)
         self._set_active_button(page_name)
         self._close_editors()
+        for callback in getattr(self.window, "_page_show_listeners", []):
+            callback(page_name)
 
     def _close_editors(self) -> None:
         hide_frame(self.window.fcm_editframe)

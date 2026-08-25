@@ -1,8 +1,11 @@
-"""
-Keyboard (and mouse button) injection via Win32 SendInput.
+#
+# service/mapping/input_sender.py
+# Keyboard and mouse button injection via Win32 SendInput.
+#
 
+"""
 Why not pynput / keyboard / pyautogui?
-───────────────────────────────────────
+──────────────────────────────────────
 - Fewer runtime dependencies.
 - Direct ctypes call = no extra layer between us and the Win32 API.
 - SendInput is the correct way to inject synthetic input on Windows;

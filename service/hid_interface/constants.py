@@ -1,8 +1,23 @@
-"""
-All hardware constants in one place.
+#
+# service/hid_interface/constants.py
+# All hardware constants in one place.
+#
 
-Keeping these separate from logic means that if Flydigi ships a firmware
-update that moves a bit, there is exactly one file to change.
+"""
+Purpose
+───────
+Centralized hardware constants for the Vader 5 Pro HID interface. Keeping
+these separate from logic means that if Flydigi ships a firmware update
+that moves a bit, there is exactly one file to change.
+
+Contents
+────────
+- HID device identity (VID/PID/usage page)
+- Report framing and validation
+- Vendor initialization command sequences
+- Button bit layout mapping
+- Timing constants (debounce, reconnect delays)
+- Cross-validation with config schema
 """
 
 from shared.config import MAPPABLE_BUTTONS

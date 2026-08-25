@@ -1,63 +1,49 @@
-"""Create/edit/delete/save/load/activate profiles.
+#
+# gui/scripts/profiles.py
+# Create/edit/delete/save/load/activate profiles.
+#
 
-Sessions are keyed by a profile's stable "id" (a uuid assigned once at
-creation, never reused), not by its display name. A rename only ever
-touches "name" — anything holding the id (fcgi_profile, mapping.py's
-per-profile key assignments) keeps working across it.
+"""
+SESSIONS
+  Keyed by stable "id" (UUID assigned once at creation, never reused), not display name.
+  Rename only touches "name" — anything holding the id (fcgi_profile, mapping.py's
+  per-profile assignments) keeps working. fcplh_add creates in-memory, unsaved session.
+  Nothing appears in fcpl_profilelist (or fcgi_profile) until fcpeh_save runs. Cancel
+  or navigating away discards unsaved sessions (see _discard_pending and
+  window._editor_close_listeners).
 
-fcplh_add only creates an in-memory, unsaved session — nothing is
-added to fcpl_profilelist (and so nothing shows up on fcgi_profile)
-until fcpeh_save runs. Cancel, or navigating away without saving,
-discards that unsaved session — see _discard_pending and
-window._editor_close_listeners.
+SELECTABLE LIST
+  fcpl_profilelist driven by ui_utils.SelectableList: single click selects, double click
+  (or Edit button) opens, Delete/Backspace/Ctrl+A act on list. Every delete confirmed
+  via ui_utils.confirm_dialog. DEFAULT_PROFILE_ID always exists, can't be deleted or
+  renamed. It's the fallback when active profile is deleted, so mapping.py always has
+  a valid profile to read from. Registered as "pinned": always first, excluded from
+  drag-reorder and delete_selected, rendered in DEFAULT_TEXT_COLOR.
 
-fcpl_profilelist is driven by ui_utils.SelectableList: a single click
-selects, a double click (or the Edit button) opens it, and
-Delete/Backspace/Ctrl+A act on the list while it has focus. Every
-delete funnels through SelectableList.delete_selected(), which
-confirms via ui_utils.confirm_dialog first.
+AUTOMATION
+  fcpeeos_combobox2 opens native file browser (tkinter.filedialog) not a dropdown,
+  since "Start with Program" is a filesystem path. Displays only executable filename
+  for readability, full path persisted in session["automation"]["exe"] and tracked in
+  self._current_exe_path while open. Combobox locked to selection-only via
+  ui_utils.lock_combobox_typing. Dropdown arrow redirected to browser via
+  ui_utils.redirect_dropdown_arrow_to_action.
 
-A profile with id DEFAULT_PROFILE_ID always exists and can't be
-deleted or renamed (see _migrate, fcplh_delete's guard, and
-_open_session/fcpeh_save's DEFAULT_PROFILE_ID checks). It's the
-fallback fcgi_profile/active_profile revert to when the active profile
-gets deleted, so there's always a valid profile for mapping.py to read
-key assignments from. It's registered with SelectableList as
-"pinned": always first in the list, excluded from drag-reorder and
-from delete_selected, and rendered in DEFAULT_TEXT_COLOR.
+HOTKEY CAPTURE
+  fcpeeos_entry3 "click to record a hotkey" shared with fcgafskk_entry (mapping.py)
+  via ui_utils.bind_hotkey_capture.
 
-fcpeeos_combobox2 opens the native file browser (tkinter.filedialog)
-rather than behaving like a normal dropdown, since "Start with
-Program" is a filesystem path, not a fixed choice list. The field
-displays just the executable's filename for readability, but the full
-path is what's persisted (session["automation"]["exe"]) and tracked in
-self._current_exe_path while a profile is open — see
-_open_exe_browser. Since this combobox never has real `values`, its
-dropdown arrow is also redirected to the same browser via
-ui_utils.redirect_dropdown_arrow_to_action.
+NAVIGATION GUARD
+  _navigation_guard registered on window._navigation_guards (consulted by navigation.py
+  before page switches) and called from _on_list_select before switching profiles. If
+  current session is dirty (_has_unsaved_changes — name, automation, or hotkey differ
+  from disk), shows ui_utils.confirm_unsaved_changes. Only returns True if user picks
+  Save or Discard — Cancel blocks navigation, caller restores prior selection.
 
-fcgi_profile and fcpeeos_combobox2 are locked to selection-only via
-ui_utils.lock_combobox_typing, since typing a value that doesn't
-correspond to a real choice could reference something that doesn't
-exist.
-
-fcpeeos_entry3's "click to record a hotkey" lives once in
-ui_utils.bind_hotkey_capture, shared with fcgafskk_entry (mapping.py).
-
-_navigation_guard is what stops unsaved field edits from silently
-vanishing: it's registered on window._navigation_guards (consulted by
-navigation.py before any page switch) and also called directly from
-_on_list_select before switching to a different profile. If the
-currently-open session is dirty (_has_unsaved_changes — name,
-automation, or hotkey differs from what's on disk), it shows
-ui_utils.confirm_unsaved_changes and only returns True if the user
-picked Save or Discard — Cancel blocks the navigation, and the caller
-is responsible for restoring the prior selection.
-
-show_frame/hide_frame come from ui_utils.py so this shares the same
-geometry cache as navigation.py. The local config.json read/write is
-duplicated from macros.py/settings.py/mapping.py — factor it into a
-shared module once the GUI is merged with the wider project.
+PROFILE DROPDOWN
+  fcgi_profile locked to selection-only, populated by _refresh_mapping_combobox from
+  saved sessions. Explicit command binding in on_start (same fix as mapping.py's
+  fcgafsmm_combobox) ensures selecting a profile persists active_profile to disk.
+  DEFAULT_TEXT_COLOR distinguishes Default profile in dropdown.
 """
 
 from __future__ import annotations

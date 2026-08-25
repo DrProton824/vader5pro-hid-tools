@@ -1,29 +1,41 @@
-"""
-service/tray.py — Minimal Win32 system tray icon for VaderService
+#
+# service/tray.py
+# Minimal Win32 system tray icon for VaderService
+#
 
+"""
 Why hand-rolled ctypes instead of pystray / infi.systray?
-─────────────────────────────────────────────────────────
+──────────────────────────────────────────────────────────
 The rest of this project deliberately keeps its dependency list tiny
 (see input_sender.py's docstring on SendInput vs pynput). Shell_NotifyIcon
 is a small, extremely stable Win32 API, so wrapping it directly avoids
-pulling in a whole packaging-fragile tray library for a couple hundred
-lines of code.
+pulling in a whole packaging-fragile tray library for ~600 lines of code.
 
 Menu rendering
 ──────────────
-An earlier version of this file used TrackPopupMenu with MF_OWNERDRAW
-items (WM_MEASUREITEM / WM_DRAWITEM). That API turned out to be
-unreliable from ctypes on 64-bit Windows here: WM_MEASUREITEM fired and
-the struct layout was correct, but Windows ignored the returned item
-size and fell back to a near-zero "checkbox only" size, so the popup
-rendered as a tiny blank square with nothing visible.
+An earlier version used TrackPopupMenu with MF_OWNERDRAW items
+(WM_MEASUREITEM / WM_DRAWITEM). That API turned out to be unreliable from
+ctypes on 64-bit Windows: WM_MEASUREITEM fired and the struct layout was
+correct, but Windows ignored the returned item size and fell back to a
+near-zero "checkbox only" size, so the popup rendered as a tiny blank square.
 
-Instead, the menu is now a small borderless top-level window that we
-paint ourselves (WM_PAINT with GDI FillRect/DrawTextW) and position
-next to the tray icon. This sidesteps owner-draw menus entirely, so
-there is no dependency on how a particular Windows build chooses to
-(mis)handle WM_MEASUREITEM. It also matches the app's palette exactly
-regardless of the user's system theme.
+Instead, the menu is now a small borderless top-level window that we paint
+ourselves (WM_PAINT with GDI FillRect/DrawTextW) and position next to the
+tray icon. This sidesteps owner-draw menus entirely, so there's no dependency
+on how a particular Windows build chooses to (mis)handle WM_MEASUREITEM. It
+also matches the app's palette exactly regardless of the user's system theme.
+
+Palette
+───────
+Colors mirror the GUI (gui/scripts/ui_utils.py), so the tray menu reads as
+part of the same app rather than a bare system menu. Green dot = connected,
+red dot = disconnected.
+
+Thread safety
+─────────────
+update_status() and update_menu_item() are thread-safe: they post messages
+to the message loop rather than calling GDI functions directly. Safe to call
+before run().
 
 Usage
 ─────

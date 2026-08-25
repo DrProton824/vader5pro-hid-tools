@@ -1,25 +1,28 @@
-"""Controller detection, connection state, battery and status info.
+#
+# gui/scripts/device.py
+# Controller detection, connection state, battery and status info.
+#
 
-Reads service-written status.json instead of config.json, keeping
-service → GUI status separate from GUI → service configuration. This
-script only reads the file; it never writes it.
+"""
+STATUS SOURCE
+  Reads service-written status.json (not config.json), keeping service → GUI status
+  separate from GUI → service configuration. This script only reads, never writes.
 
-Expected STATUS_PATH shape:
+STATUS FILE STRUCTURE
+  {
+    "controllers": [
+      {"name": "Flydigi Vader 4 Pro", "connected": true, "battery": 82}
+    ]
+  }
+  
+  Supports multiple devices though the service typically tracks zero or one.
+  Missing or invalid status.json falls back to "Disconnected" without errors.
 
-    {
-      "controllers": [
-        {"name": "Flydigi Vader 4 Pro", "connected": true, "battery": 82}
-      ]
-    }
-
-"controllers" supports multiple devices, though the current service
-normally tracks zero or one. A missing or invalid status.json falls
-back to "Disconnected"/blank without raising errors.
-
-fsncs_refresh triggers a manual refresh; on_start also polls every
-STATUS_POLL_MS. fsnc_controllers is selection-only via
-ui_utils.lock_combobox_typing and auto-selects the first available
-controller when the current selection is unavailable.
+UI BEHAVIOR
+  Polls STATUS_PATH every STATUS_POLL_MS after on_start(). Manual refresh via
+  fsncs_refresh. Controller dropdown is selection-only (locked via
+  ui_utils.lock_combobox_typing) and auto-selects the first available controller
+  when the current selection becomes unavailable.
 """
 
 from __future__ import annotations

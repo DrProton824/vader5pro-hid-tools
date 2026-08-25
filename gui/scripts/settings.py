@@ -1,10 +1,26 @@
-"""Application settings, startup options, user preferences.
+#
+# gui/scripts/settings.py
+# Application settings, startup options, user preferences.
+#
 
-_read_config/_write_config prefer shared/config.py (present once this
-runs inside the merged repo) and fall back to a local config.json for
-standalone testing inside CTkMaker itself — same pattern as macros.py
-and profiles.py. Either way this reads/writes the same config.json
-VaderService.exe watches.
+"""
+CONFIG SOURCE
+  _read_config/_write_config prefer shared/config.py (present once merged into repo)
+  and fall back to local config.json for standalone testing in CTkMaker. Either way
+  reads/writes the same config.json that VaderService.exe watches.
+
+AUTOSTART
+  fcsvss_switch2 toggles autostart via Windows registry (HKEY_CURRENT_USER\Software\...).
+  _service_exe_path() resolves to VaderService.exe in dist folder if frozen (PyInstaller),
+  or to service/main.py via pythonw.exe if running from source. Non-Windows platforms
+  are no-op (winreg unavailable).
+
+CLOSE TO TRAY
+  fcsvss_switch3 toggles whether closing the window minimizes to system tray (withdraw)
+  or exits the application (destroy). Default is True (close to tray).
+
+STATUS DISPLAY
+  Both switches display "ON"/"OFF" status labels updated on toggle.
 """
 
 from __future__ import annotations

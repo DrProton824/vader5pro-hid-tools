@@ -1,54 +1,45 @@
-"""Create/edit/delete macros and manage macro actions.
+#
+# gui/scripts/macros.py
+# Create/edit/delete macros and manage macro actions.
+#
 
-Each entry in fcmv_macrolist is a "session": a stable key that stays
-the same across renames, independent of the macro's display name.
-fcmvh_add only creates an in-memory, unsaved session — nothing is
-added to fcmv_macrolist (and so nothing shows up on fcgafsmm_combobox)
-until fcmevh_save runs. Cancel, or navigating away without saving,
-discards that unsaved session — see _discard_pending and
-window._editor_close_listeners.
+"""
+SESSIONS
+  Each fcmv_macrolist entry is a "session" — a stable key independent of the macro's
+  display name. fcmvh_add creates an in-memory, unsaved session. Nothing appears in
+  fcmv_macrolist (or fcgafsmm_combobox) until fcmevh_save runs. Cancel or navigating
+  away discards unsaved sessions (see _discard_pending and window._editor_close_listeners).
 
-fcmv_macrolist and fcmevm_macroactions are both driven by
-ui_utils.SelectableList: a single click selects a row, a double click
-(or the Edit button, for the macro list) opens it, and
-Delete/Backspace/Ctrl+A act on whichever list currently has focus.
-Every delete funnels through SelectableList.delete_selected(), which
-confirms via ui_utils.confirm_dialog before calling back into this file.
+SELECTABLE LISTS
+  fcmv_macrolist and fcmevm_macroactions use ui_utils.SelectableList: single click
+  selects, double click (or Edit button) opens, Delete/Backspace/Ctrl+A act on the
+  focused list. Deletes confirm via ui_utils.confirm_dialog before calling back.
 
-fcmevm_macroactions entries are keyed by a fresh uuid every time the
-list is rebuilt (_action_by_key), since the underlying action dicts
-have no stable id of their own; _reorder_draft_actions and
-_delete_actions translate those keys back into the actions list on the
-current session.
+ACTION KEYS
+  fcmevm_macroactions entries keyed by fresh UUIDs each rebuild (_action_by_key),
+  since action dicts have no stable id. _reorder_draft_actions and _delete_actions
+  translate keys back to the actions list on the current session.
 
-Editing an existing macro's actions — recording, add/edit via the
-Macroaction popup, delete, drag-reorder — all operate on
-self._draft_actions, a working copy snapshotted when the session is
-opened (_open_session), NOT on session["actions"] directly. Only
-fcmevh_save commits the draft back into session["actions"] and to
-disk; Cancel (or switching to a different row) just drops the draft,
-leaving the session's actual actions untouched.
+DRAFT ACTIONS
+  Editing (record, add/edit, delete, drag-reorder) operates on self._draft_actions,
+  a working copy snapshotted when the session opens (_open_session). Only fcmevh_save
+  commits the draft to session["actions"] and disk. Cancel or switching rows discards
+  the draft, leaving the session's actual actions untouched.
 
-Recording appends to self._draft_actions from a background keyboard-hook
-thread (_on_key_event) and throttles its UI refresh
-(RECORD_REFRESH_THROTTLE_MS) rather than refreshing on every keystroke —
-_flush_action_refresh only appends the rows that are actually new
-(_append_new_actions) instead of rebuilding the whole list each tick.
+RECORDING
+  Appends to self._draft_actions from a background keyboard-hook thread (_on_key_event).
+  UI refresh throttled (RECORD_REFRESH_THROTTLE_MS) — _flush_action_refresh only appends
+  new rows (_append_new_actions) instead of rebuilding the whole list each tick.
 
-_navigation_guard is what stops unsaved changes from silently
-vanishing: it's registered on window._navigation_guards (consulted by
-navigation.py before any page switch) and also called directly from
-_on_list_select before switching to a different macro. If the
-currently-open session is dirty (_has_unsaved_changes), it shows
-ui_utils.confirm_unsaved_changes and only returns True if the user
-picked Save or Discard — Cancel blocks the navigation, and the caller
-is responsible for restoring the prior selection.
+NAVIGATION GUARD
+  _navigation_guard registered on window._navigation_guards (consulted by navigation.py
+  before page switches) and called from _on_list_select before switching macros. If the
+  current session is dirty (_has_unsaved_changes), shows ui_utils.confirm_unsaved_changes.
+  Only returns True if user picks Save or Discard — Cancel blocks navigation.
 
-show_frame/hide_frame come from ui_utils.py so this shares the same
-geometry cache as navigation.py (fcm_editframe is hidden there and
-shown again here). The local config.json read/write is duplicated from
-profiles.py/settings.py — factor it into a shared module once the GUI
-is merged with the wider project.
+GEOMETRY CACHE
+  show_frame/hide_frame from ui_utils.py share the same geometry cache as navigation.py
+  (fcm_editframe hidden there, shown here).
 """
 
 from __future__ import annotations

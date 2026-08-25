@@ -1,25 +1,27 @@
-"""Page switching, frame visibility, navigation state.
+#
+# gui/scripts/navigation.py
+# Page switching, frame visibility, navigation state.
+#
 
-Buttons marked `*` in the spec (fcmvh_add, fcmevh_save, fcplh_add,
-fcpeh_save, fcmevmnn_cancel1, fcpeenn_cancel1) also perform a data
-action, so their show/hide happens in macros.py / profiles.py instead
-— a widget event can only bind to one method. This module only owns
-triggers where navigation is the whole story.
+"""
+NAVIGATION GUARDS
+  Before switching pages, _show_page consults window._navigation_guards — callables
+  registered by macros.py/profiles.py that return False to block the switch. This
+  prompts to save/discard unsaved changes instead of silently dropping them.
 
-Switching pages also closes any open editor, same as Cancel — but a
-page switch never goes through fcmevmnn_cancel1/fcpeenn_cancel1, so
-macros.py/profiles.py wouldn't otherwise find out and would leave a
-never-saved "New Macro"/"New Profile" session dangling in memory.
-_close_editors broadcasts through window._editor_close_listeners so
-they can discard it the same way Cancel does.
+EDITOR CLOSE
+  Page switches close any open editor via _close_editors, which broadcasts through
+  window._editor_close_listeners. This discards unsaved "New Macro"/"New Profile"
+  sessions that wouldn't otherwise find out about the page switch.
 
-Before any of that happens, _show_page consults
-window._navigation_guards — callables macros.py/profiles.py register
-that return False to block the switch. That's what makes switching
-pages (or picking a different row within a list) prompt to save/discard
-unsaved changes instead of silently dropping them: the guard shows
-that prompt and only returns True once the user picked Save or
-Discard, or the editor wasn't dirty to begin with.
+DUAL-ACTION BUTTONS
+  Buttons marked `*` in the spec (fcmvh_add, fcmevh_save, fcplh_add, fcpeh_save, etc.)
+  perform both a data action and navigation, so show/hide happens in macros.py/profiles.py
+  instead. This module only owns triggers where navigation is the whole story.
+
+MAPPING MODE TOGGLE
+  fcgafs_keybind and fcgafs_macros sit at identical coordinates (fixed overlapping pair),
+  so the toggle uses tkraise() instead of show_frame/hide_frame.
 """
 
 from __future__ import annotations

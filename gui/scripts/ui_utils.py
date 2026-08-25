@@ -1,24 +1,57 @@
-"""Frame show/hide helper shared by navigation.py, macros.py and profiles.py.
+#
+# gui/scripts/ui_utils.py
+# Frame show/hide helpers, list management, and shared UI components.
+#
 
-Lives inside scripts/ itself — part of the GUI, not the wider
-VaderService/VaderConfig project — so the GUI stays self-contained and
-still previews/runs standalone.
+"""
+GEOMETRY CACHE
+  Single shared _GEOMETRY_CACHE preserves pack/grid/place state across show/hide calls.
+  Required because navigation.py hides fcm_editframe/fcp_editframe on startup, and
+  macros.py/profiles.py show them again later — separate per-file caches couldn't
+  coordinate. animate_show_frame/animate_hide_frame optionally slide-reveal instead
+  of instant pop (requires place() with fixed height).
 
-A single shared geometry cache is required here: navigation.py hides
-fcm_editframe/fcp_editframe on startup, and macros.py/profiles.py show
-them again later. Two separate per-file caches couldn't see each
-other's state.
+SELECTABLE LIST
+  SelectableList: single click selects, double click opens, Delete/Backspace/Ctrl+A
+  act on focused list, drag reorders. Supports multi-select via Shift/Ctrl. Pinned
+  rows (e.g. Default profile) always render first, can't be dragged/deleted, render
+  in pinned_color. Destructive actions confirm via confirm_dialog first.
+  fcmv_macrolist, fcpl_profilelist, fcmevm_macroactions all use SelectableList.
 
-Also owns the SelectableList helper: single click selects, double
-click opens, Delete/Backspace/Ctrl+A act on whichever list currently
-has focus, drag reorders, and destructive actions go through
-confirm_dialog first. fcmv_macrolist, fcpl_profilelist and
-fcmevm_macroactions all share this.
+DIALOGS
+  confirm_dialog — modal Yes/No for destructive actions.
+  confirm_unsaved_changes — modal Save/Discard/Cancel for dirty editors.
+  open_macro_action_editor — CTkToplevel popup to add/edit one macro action
+    (press/release/delay). Captures single keys via bind_single_key_capture.
+    Returns new/edited action dict or None on cancel.
 
-open_macro_action_editor is the popup macros.py uses to add/edit a
-single macro action (press/release/delay) — a self-built CTkToplevel
-in the same style as confirm_dialog/confirm_unsaved_changes, not a
-separate CTkMaker-exported window.
+HOTKEY CAPTURE
+  bind_hotkey_capture — live hotkey combo capture for fcpeeos_entry3 (profiles.py)
+    and fcgafskk_entry (mapping.py). Keys fill in as held, capture ends when all
+    keys release. Ctrl+Alt+Shift+Key fixed order.
+  bind_single_key_capture — single physical key capture for macro press/release fields.
+    Modifiers can be held before the deciding key; result is the character Tk resolved,
+    not the keysym. Returns arm() function for programmatic start. entry._is_placeholder
+    tracks whether shown text is hint (True) or confirmed value (False).
+
+COMBOBOX HELPERS
+  lock_combobox_typing — convert CTkComboBox to selection-only (dropdown works,
+    typing/arrow keys blocked, Backspace/Delete clear field).
+  redirect_dropdown_arrow_to_action — make dropdown arrow trigger custom action
+    instead of opening value list, used by fcpeeos_combobox2 (file browser).
+
+TOOLBAR COLORS
+  apply_toolbar_colors — apply TOOLBAR_COLORS scheme to all toolbar buttons across
+    macros/profiles/settings pages. Groups: primary (Add/Record/Save), secondary
+    (Edit/Delete), cancel (Cancel/Stop), accent1/accent2 (reserved).
+
+OTHER HELPERS
+  relayout_list — grid buttons into list_frame one per row (fixed height with width stretch).
+  resolve_button — walk .master chain to find which tracked button a widget belongs to.
+  highlight_selected — recolor buttons by selection state.
+  set_entry_value — set CTkEntry content with placeholder_text restoration on empty.
+  widget_is_descendant — True if widget is ancestor or nested under it (scope bindings).
+  bind_list_shortcuts — wire Delete/Backspace/Ctrl+A to list_frame when focused.
 """
 
 from __future__ import annotations
@@ -140,15 +173,7 @@ def show_frame(frame) -> None:
 
 
 def animate_show_frame(window, frame, steps: int = 10, delay_ms: int = 12) -> None:
-    """Optional slide-down reveal for `frame`, in place of show_frame()'s
-    instant pop. Tkinter has no per-widget alpha channel, so this grows
-    the frame's height from 0 to its cached value over `steps` frames
-    instead of a true opacity blend.
-
-    Only meaningfully animatable for place()-managed frames with a
-    fixed height (e.g. fcm_editframe/fcp_editframe, if reconfigured to
-    use place() instead of pack()/grid()).
-    """
+    """Slide-down reveal by growing height from 0 to cached value. Requires place() with fixed height."""
     show_frame(frame)
     cached = _GEOMETRY_CACHE.get(frame)
     if not cached or cached[0] != "place" or "height" not in cached[1]:
@@ -556,22 +581,8 @@ def _hotkey_sort_key(keysym: str):
 
 
 def bind_hotkey_capture(window, entry, on_captured=None) -> None:
-    """Wire `entry` so a click starts live hotkey capture: keys fill in
-    as they go down, in a fixed Ctrl+Alt+Shift+Key order, and capture
-    ends once every held key comes back up. Shared by fcpeeos_entry3
-    (profiles.py) and fcgafskk_entry (mapping.py).
-
-    Captured keys are bound at the Tkinter level (KeyPress/KeyRelease
-    on `entry`, swallowed with "break") rather than a global OS hook,
-    so this only needs the field focused, not elevated permissions.
-    The held/peak sets stop a key released and pressed again mid-combo
-    from appearing twice.
-
-    `on_captured(text)`, if given, fires once when capture ends — use
-    it when the field has no separate Save button and the value needs
-    to persist immediately (mapping.py). profiles.py doesn't need it,
-    since fcpeh_save reads the entry directly.
-    """
+    """Live hotkey combo capture: click to start, keys fill as held, capture ends when released.
+    Keys render in fixed Ctrl+Alt+Shift+Key order. Fires `on_captured(text)` when done."""
     state = {"active": False, "held": set(), "peak": set()}
 
     def _render() -> str:
@@ -581,6 +592,7 @@ def bind_hotkey_capture(window, entry, on_captured=None) -> None:
         entry.delete(0, "end")
         entry.insert(0, _render())
 
+    # held/peak sets prevent a key released and pressed again mid-combo from appearing twice.
     def _on_press(event):
         if not state["active"]:
             return "break"  # focused without a click (e.g. pre-filled for editing) — stay read-only
@@ -595,6 +607,8 @@ def bind_hotkey_capture(window, entry, on_captured=None) -> None:
         state["held"].discard(event.keysym)
         if not state["held"] and state["peak"]:
             state["active"] = False
+            # Use on_captured when the field has no separate Save button and needs to persist immediately
+            # (mapping.py does this; profiles.py doesn't, since fcpeh_save reads the entry directly).
             if on_captured:
                 text = _render()
                 window.after(0, lambda: on_captured(text))
@@ -632,41 +646,8 @@ def bind_hotkey_capture(window, entry, on_captured=None) -> None:
 
 
 def bind_single_key_capture(window, entry, on_captured=None):
-    """Like bind_hotkey_capture, but captures exactly one physical key
-    instead of a held combo, for the Macroaction editor's press/release
-    fields: a macro "press"/"release" action represents a single
-    physical key event, not a chord.
-
-    Shift/Ctrl/Alt/Super may be held *before* the deciding key without
-    ending the capture — that's what lets Shift+A resolve to "A", or
-    Ctrl+Alt+E to "€", with the *resulting* character captured instead
-    of ending on the first modifier. While modifiers are held, the
-    entry renders them live in press order (not the fixed
-    Ctrl/Alt/Shift/Super convention bind_hotkey_capture uses, since
-    there's no saved shortcut to normalize here). A non-modifier key
-    replaces that live display with the resolved character and ends
-    capture.
-
-    The character is read from event.char (what Tk/the OS/the active
-    layout resolved the combination to), not derived from event.keysym
-    — keysym reports e.g. "EuroSign" for Ctrl+Alt+E, not "€", and Tk
-    already does the layout resolution for us via event.char.
-
-    If every held modifier comes back up without another key ever
-    being pressed, that modifier alone is captured (e.g. a standalone
-    "press Shift" action); if more than one was held, the first one
-    pressed is captured.
-
-    Returns the `arm` function so a caller can start capture
-    programmatically. `arm(placeholder)` clears any actual text and
-    shows `placeholder` as grayed-out hint text — visible but never
-    treated as a confirmed value.
-
-    entry._is_placeholder tracks whether the currently shown text is a
-    hint (True) or an actual resolved value (False). Callers must check
-    getattr(entry, "_is_placeholder", False) alongside the usual
-    "is it empty" check before persisting.
-    """
+    """Single physical key capture for macro press/release fields.
+    Returns `arm(placeholder)` function to start capture. entry._is_placeholder tracks hint vs confirmed value."""
     _MODIFIER_KEYSYMS = {
         "Shift_L", "Shift_R",
         "Control_L", "Control_R",
@@ -679,6 +660,11 @@ def bind_single_key_capture(window, entry, on_captured=None):
         "normal_color": entry.cget("text_color"),
     }
     entry._is_placeholder = False
+    
+    # Modifiers (Shift/Ctrl/Alt/Super) may be held before the deciding key without
+    # ending capture — Shift+A resolves to "A", Ctrl+Alt+E to "€". While modifiers
+    # are held, the entry shows them live in press order. A non-modifier key replaces
+    # that display with the resolved character (from event.char, not keysym) and ends capture.
 
     def _render_held() -> str:
         return "+".join(_hotkey_label(k) for k in state["peak"])
@@ -730,6 +716,8 @@ def bind_single_key_capture(window, entry, on_captured=None):
         if keysym in _MODIFIER_KEYSYMS:
             if keysym in state["held"]:
                 state["held"].remove(keysym)
+            # If all modifiers release without another key, capture that modifier alone
+            # (e.g. a standalone "press Shift" action). If multiple were held, capture the first.
             if not state["held"] and state["peak"]:
                 _finalize(_hotkey_label(state["peak"][0]))
             return "break"
@@ -742,9 +730,9 @@ def bind_single_key_capture(window, entry, on_captured=None):
         entry.configure(placeholder_text="")
         entry.delete(0, "end")
         if placeholder:
-            # Inserted as real, gray-colored content rather than via
-            # placeholder_text — CTkEntry clears that on focus, and
-            # this is focused immediately below.
+            # Show placeholder as grayed-out hint text (not via placeholder_text, which CTkEntry
+            # clears on focus). Callers must check getattr(entry, "_is_placeholder", False)
+            # before persisting to avoid treating hints as confirmed values.
             entry.insert(0, placeholder)
             entry.configure(text_color=PLACEHOLDER_TEXT_COLOR)
             entry._is_placeholder = True
@@ -771,30 +759,8 @@ def bind_single_key_capture(window, entry, on_captured=None):
 
 
 def open_macro_action_editor(window, action=None):
-    """Modal popup to add or edit one macro action (press / release /
-    delay). Built like confirm_dialog/confirm_unsaved_changes — a plain
-    CTkToplevel constructed fresh per call and torn down via
-    wait_window.
-
-    Returns the new/edited action dict, or None if the user cancelled.
-    Pass an existing action dict via `action` to pre-fill for editing;
-    omit it to add a new one.
-
-    Manual entries never get a scan_code — only actions captured
-    through macros.py's keyboard-hook recording do — except when
-    editing and the key is left unchanged, in which case the original
-    scan_code carries over.
-
-    Pressing Enter while a press/release/delay entry is focused is
-    consumed by that entry's own key handler (capture, or delay-digit
-    filtering) and never reaches the dialog-level <Return> (Save)
-    binding until a later Enter press, once focus has already left the
-    entry.
-
-    Entries can show grayed-out hint text that must never be persisted
-    as if the user had confirmed it — each entry's `_is_placeholder`
-    attribute tracks this; _save() checks it first.
-    """
+    """Modal popup to add or edit a macro action (press/release/delay).
+    Returns the action dict, or None if cancelled. Pass `action` to pre-fill for editing."""
     try:
         from navigation import BTN_DEFAULT_COLOR, BTN_DEFAULT_HOVER, BTN_ACTIVE_COLOR, BTN_ACTIVE_HOVER
     except ImportError:
@@ -907,6 +873,8 @@ def open_macro_action_editor(window, action=None):
     def _save():
         mode = state["mode"]
         entry = entries[mode]
+        # Each entry's _is_placeholder tracks whether the shown text is a hint
+        # (True) or a confirmed value (False). _save() checks it before persisting.
         if getattr(entry, "_is_placeholder", False):
             return
         value = entry.get().strip()
@@ -923,6 +891,8 @@ def open_macro_action_editor(window, action=None):
             result["action"] = {"type": "wait", "ms": ms}
         else:
             new_action = {"type": mode, "key": value}
+            # Manual entries never get scan_code — only keyboard-hook recordings do.
+            # If editing and the key unchanged, the original scan_code carries over.
             if mode == initial_mode and value == initial_value and initial_scan_code is not None:
                 new_action["scan_code"] = initial_scan_code
             result["action"] = new_action
@@ -935,6 +905,10 @@ def open_macro_action_editor(window, action=None):
 
     dialog.protocol("WM_DELETE_WINDOW", _cancel)
     dialog.bind("<Escape>", lambda e: _cancel())
+    
+    # Pressing Enter while a press/release/delay entry is focused is consumed
+    # by that entry's own key handler (capture or digit filtering) and never
+    # reaches the dialog-level <Return> binding until focus leaves the entry.
     dialog.bind("<Return>", lambda e: _save())
     dialog.update_idletasks()
 
@@ -950,15 +924,7 @@ def open_macro_action_editor(window, action=None):
 
 
 def lock_combobox_typing(combobox) -> None:
-    """Turn a CTkComboBox into selection-only: typing, cursor movement,
-    and character-by-character Backspace/Delete are all blocked (mouse
-    clicks on the dropdown still work) — Backspace/Delete instead clear
-    the field in one step. Shared by fcgi_profile, fcgafsmm_combobox,
-    fcpeeos_combobox2 and fsnc_controllers.
-
-    Note: .set("") here does not invoke the combobox's `command`
-    callback — only an actual dropdown selection does.
-    """
+    """Convert CTkComboBox to selection-only: typing blocked, Backspace/Delete clear the field."""
     def _on_key(event):
         if event.keysym in ("BackSpace", "Delete"):
             combobox.set("")
@@ -968,25 +934,11 @@ def lock_combobox_typing(combobox) -> None:
 
 
 def redirect_dropdown_arrow_to_action(combobox, action: Callable[[], Any]) -> None:
-    """Make `combobox`'s own dropdown arrow trigger `action` instead of
-    opening its (real or empty) value list, as long as `combobox` has
-    no configured `values`. Stops redirecting once values are actually
-    populated.
-
-    Needed for fcpeeos_combobox2, which is a file-browse trigger, not a
-    real choice list. CTkComboBox.bind() only ever forwards to the
-    inner text Entry, never to the canvas the dropdown arrow is drawn
-    on — the arrow is a separate hit area, wired via
-    canvas.tag_bind("dropdown_arrow", ...) inside CTkComboBox's own
-    __init__, before this function ever runs, so overriding an instance
-    method afterward has no effect. The only way to intercept it is a
-    second, independent binding on the same canvas tag (Tk fires every
-    binding registered via add="+", so this doesn't disturb the
-    original).
-
-    No-op if the installed customtkinter version doesn't expose the
-    expected `_canvas` attribute.
-    """
+    """Make dropdown arrow trigger `action` instead of opening value list. Only works if `combobox` has no configured `values`."""
+    
+    # CTkComboBox.bind() only forwards to the inner text Entry, not the canvas
+    # the arrow is drawn on. We need a second binding on the canvas tag itself.
+    # add="+" lets multiple bindings coexist on the same tag.
     canvas = getattr(combobox, "_canvas", None)
     if canvas is None:
         return

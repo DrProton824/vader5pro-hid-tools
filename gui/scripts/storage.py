@@ -1,3 +1,8 @@
+#
+# gui/scripts/storage.py
+# CRUD helpers over config.json for profiles, macros and settings.
+#
+
 """CRUD helpers over config.json for profiles, macros and settings.
 
 Not a CTkScript — a plain module imported by macros.py, profiles.py

@@ -1,39 +1,40 @@
-"""fc_mapping page: button selection and per-profile key/macro assignment.
+#
+# gui/scripts/mapping.py
+# Button selection and per-profile key/macro assignment.
+#
 
-BUTTON SELECTION: Hit-testing is handled by ControllerCanvas using the
-polygon data from controller.png/hit_zones.json — see its docstring.
-fcgi_HOME is the exception, since it has no SVG hit zone and remains a
-CTkButton layered over the canvas like fcgi_profile.
-
-Selecting a button mirrors the selection into the relevant UI
-variables, loads its assignment for the active profile, switches the
-keybind/macro segment to the assigned type, and highlights the button.
-A button holds either a keybind or a macro, never both.
-
-ASSIGNMENTS: Stored per profile (keyed by profile id) as
-{"type": "keybind"|"macro", "value": "..."}. This extends the flat
-DEFAULT_MAPPING shape in config.py. shared/config.py's load_bindings()
-resolves both types for the service — see service/mapping/mapper.py
-and service/mapping/macro_player.py.
-
-INDICATORS: Each assigned button gets a dot via
-_controller.set_indicator(). Indicators refresh on save, profile
-switch, and startup.
-
-MACROS: fcgafsmm_combobox gets its values from macros.py via
-_refresh_macro_combobox; this module only reads/writes the selected
-assignment. Renaming or deleting an already-assigned macro does not
-update that assignment automatically.
-
-PROFILE CHANGES: profiles.py notifies window._profile_change_listeners
-when the active profile changes; this module registers a listener to
-refresh its fields, selection, and indicators for the new profile.
-
-CLEARING: Delete/Backspace clears the selected button's assignment
-unless focus is inside fcgafskk_entry or fcgafsmm_combobox — see
-_clear_assignment.
 """
+BUTTON SELECTION
+  Hit-testing handled by ControllerCanvas using polygon data from hit_zones.json.
+  Exception: fcgi_HOME has no SVG hit zone and remains a CTkButton layered over
+  the canvas (like fcgi_profile).
+  
+  Selecting a button loads its assignment for the active profile, switches the
+  keybind/macro segment to the assigned type, and highlights the button. A button
+  holds either a keybind or a macro, never both.
 
+ASSIGNMENTS
+  Stored per profile (keyed by profile id) as {"type": "keybind"|"macro", "value": "..."}.
+  Extends the flat DEFAULT_MAPPING shape in config.py. shared/config.py's load_bindings()
+  resolves both types for the service (see service/mapping/mapper.py and macro_player.py).
+
+INDICATORS
+  Each assigned button gets a visual indicator via _controller.set_indicator().
+  Refreshed on save, profile switch, and startup.
+
+MACROS
+  fcgafsmm_combobox populated from macros.py via _refresh_macro_combobox. This module
+  only reads/writes the selected assignment. Renaming or deleting an already-assigned
+  macro does not update that assignment automatically.
+
+PROFILE CHANGES
+  profiles.py notifies window._profile_change_listeners when the active profile changes.
+  This module registers a listener to refresh fields, selection, and indicators.
+
+CLEARING
+  Delete/Backspace clears the selected button's assignment unless focus is inside
+  fcgafskk_entry or fcgafsmm_combobox.
+"""
 
 from __future__ import annotations
 

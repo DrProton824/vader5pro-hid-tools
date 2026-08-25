@@ -1,48 +1,43 @@
-"""Polygon-accurate controller hit zones driven by controller.png and
-hit_zones.json (produced by render_controller_assets.py).
+#
+# gui/scripts/controller_canvas.py
+# Polygon-accurate controller hit zones driven by controller.png and hit_zones.json.
+#
 
-CANVAS vs BUTTONS: tkinter.Canvas lets us use the actual polygon shapes
-from hit_zones.json as invisible hit-test items, so click detection
-matches the real button outlines instead of hand-placed rectangles.
-Regenerate the assets after changing the SVG.
+"""
+ARCHITECTURE
+  Uses tkinter.Canvas with polygon shapes from hit_zones.json as invisible hit-test
+  items, so click detection matches the actual button outlines instead of rectangles.
+  Both the controller image and polygons are scaled together to the requested width.
 
-COORDINATES: hit_zones.json coordinates match the pixel space of the
-rendered controller.png. Both the image and polygons are scaled
-together to the requested display_width.
+NAME TRANSLATION
+  hit_zones.json labels differ from mapping.py button names (e.g. "DPad Up" -> "UP",
+  "STICK-L" -> "LS"). HITZONE_TO_BUTTON_NAME normalizes them at load time.
 
-NAME TRANSLATION: hit_zones.json labels differ from mapping.py's button
-names (e.g. "DPad Up" -> "UP", "STICK-L" -> "LS"). HITZONE_TO_BUTTON_NAME
-normalizes them at load time. fcgi_HOME currently has no hit zone, so
-mapping.py falls back to a plain overlaid widget for it — see
-mapping.py's _setup_home_button.
-
-TRANSPARENCY: Canvas widgets are opaque. _resolve_bg_color walks up the
-parent chain to find a matching background color so transparent PNG
-pixels blend correctly.
-
-STACKING ORDER (bottom to top):
+STACKING ORDER (bottom to top)
   1. controller image
-  2. overlay tint        — semi-transparent fill for assigned buttons (OverlayIndicatorStyle)
-  3. highlight border    — outline drawn on the selected button
-  4. hit-test polygons   — invisible, must stay on top so they receive clicks
+  2. overlay tint       — semi-transparent fill for assigned buttons
+  3. highlight border   — outline drawn on the selected button
+  4. hit-test polygons  — invisible, must stay on top to receive clicks
+  
+  Items 2 and 3 are created in _render() before the polygon loop, so they naturally
+  sit below the polygons. Never tag_raise them — Tk hit-tests by stacking order, so
+  raising either would block clicks meant for the polygons.
 
-  The highlight and overlay items are created in _render() before the
-  polygon loop, so they sit below the polygons by default. Neither is
-  ever tag_raise'd above them — Tk hit-tests by stacking order, not
-  alpha, so raising either would swallow clicks meant for a polygon.
+SELECTION HIGHLIGHT
+  Canvas polygon outlines are not anti-aliased. The highlight is rendered with
+  PIL.ImageDraw at HIGHLIGHT_SUPERSAMPLE resolution, cropped to the button's bounding
+  box, and downsampled with LANCZOS for smooth edges. A single canvas image item is
+  repositioned via coords() and shown/hidden per selection.
 
-SELECTION HIGHLIGHT: Canvas polygon outlines are not anti-aliased. The
-highlight is rendered with PIL.ImageDraw at HIGHLIGHT_SUPERSAMPLE
-resolution, cropped to the selected button's bounding box, and
-downsampled with LANCZOS. A single reusable image item is repositioned
-via canvas.coords and shown/hidden per selection.
+INDICATOR STYLES
+  set_indicator() delegates to INDICATOR_STYLE. Swap INDICATOR_STYLE_CHOICE
+  ("dot" | "overlay") in the configuration section. DotIndicatorStyle draws a small
+  corner dot. OverlayIndicatorStyle draws a translucent fill via pre_render() so its
+  canvas item stays below the polygons.
 
-INDICATOR STYLES: set_indicator() delegates all drawing to
-INDICATOR_STYLE. Swap that constant in the configuration section to
-change how assigned buttons are marked. DotIndicatorStyle draws a small
-corner dot (safe above polygons). OverlayIndicatorStyle draws a
-translucent fill via the pre_render path so its canvas item stays below
-the polygons.
+REGENERATION
+  Regenerate controller.png and hit_zones.json with render_controller_assets.py
+  after changing the SVG source.
 """
 
 from __future__ import annotations

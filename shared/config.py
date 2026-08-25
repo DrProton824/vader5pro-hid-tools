@@ -179,10 +179,11 @@ def _migrate(data: ConfigData) -> bool:
 
 
 def load_config() -> ConfigData:
-    """Return the full config, migrating a legacy/incomplete file on read."""
     data = _read_raw()
     if not data:
-        return json.loads(json.dumps(DEFAULT_CONFIG))
+        data = json.loads(json.dumps(DEFAULT_CONFIG))
+        save_config(data)
+        return data
     if _migrate(data):
         save_config(data)
     return data

@@ -675,14 +675,14 @@ def bind_single_key_capture(window, entry, on_captured=None):
         entry.insert(0, _render_held())
         entry._is_placeholder = True
 
-    def _finalize(label: str) -> None:
+    def _finalize(label: str, scan_code: int | None = None) -> None:
         state["active"] = False
         entry.configure(placeholder_text="", text_color=state["normal_color"])
         entry.delete(0, "end")
         entry.insert(0, label)
         entry._is_placeholder = False
         if on_captured:
-            window.after(0, lambda: on_captured(label))
+            window.after(0, lambda: on_captured(label, scan_code))
         window.after(0, window.focus_set)
 
     def _on_press(event):
@@ -706,7 +706,7 @@ def bind_single_key_capture(window, entry, on_captured=None):
         else:
             label = _hotkey_label(keysym)
 
-        _finalize(label)
+        _finalize(label, event.keycode)
         return "break"
 
     def _on_release(event):
@@ -719,7 +719,7 @@ def bind_single_key_capture(window, entry, on_captured=None):
             # If all modifiers release without another key, capture that modifier alone
             # (e.g. a standalone "press Shift" action). If multiple were held, capture the first.
             if not state["held"] and state["peak"]:
-                _finalize(_hotkey_label(state["peak"][0]))
+                _finalize(_hotkey_label(state["peak"][0]), event.keycode)
             return "break"
         return None
 
@@ -855,12 +855,20 @@ def open_macro_action_editor(window, action=None):
         )
         entry.place(x=0, y=0, relwidth=1, relheight=1)
         entry._is_placeholder = False
+        entry._scan_code = None
         entries[mode] = entry
 
         if mode == "delay":
             entry.bind("<KeyPress>", _filter_delay_input, add="+")
         else:
-            arm_fns[mode] = bind_single_key_capture(dialog, entry)
+            def _capture_macro_key(label, scan_code, _entry=entry):
+                _entry._scan_code = scan_code
+
+            arm_fns[mode] = bind_single_key_capture(
+                dialog,
+                entry,
+                on_captured=_capture_macro_key,
+            )
 
     if initial_mode == "delay" and initial_value:
         entries["delay"].insert(0, initial_value)
@@ -891,10 +899,14 @@ def open_macro_action_editor(window, action=None):
             result["action"] = {"type": "wait", "ms": ms}
         else:
             new_action = {"type": mode, "key": value}
-            # Manual entries never get scan_code — only keyboard-hook recordings do.
-            # If editing and the key unchanged, the original scan_code carries over.
-            if mode == initial_mode and value == initial_value and initial_scan_code is not None:
+
+            scan_code = getattr(entry, "_scan_code", None)
+
+            if scan_code is not None:
+                new_action["scan_code"] = scan_code
+            elif mode == initial_mode and value == initial_value and initial_scan_code is not None:
                 new_action["scan_code"] = initial_scan_code
+
             result["action"] = new_action
         dialog.destroy()
 

@@ -1,4 +1,3 @@
-#
 # service/mapping/macro_player.py
 # Macro playback via Win32 SendInput scancodes.
 #
@@ -25,8 +24,16 @@ Threading
 Each play() call runs on its own daemon thread so a macro's "wait"
 actions never block the HID reader thread — other buttons keep working
 while a macro is mid-playback. MAX_CONCURRENT_MACROS caps how many can
-run at once (e.g. rapid re-presses of the same macro button); beyond
+run at once (e.g. rapid re-presses of different macro buttons); beyond
 that, further presses are dropped rather than queued.
+
+On top of that, the *same* macro (identified by the identity of its
+`actions` list, which is the same object each time a given macro button
+is pressed since it's looked up from the in-memory config rather than
+re-parsed per press) is never played more than once concurrently — a
+repress while it's still running is dropped. This avoids two copies of
+the same macro racing each other and stomping on shared keys (e.g. both
+holding/releasing "shift" out of sync with one another).
 """
 
 from __future__ import annotations
@@ -40,7 +47,7 @@ from .input_sender import INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP
 
 KEYEVENTF_SCANCODE = 0x0008
 
-MAX_CONCURRENT_MACROS = 4
+MAX_CONCURRENT_MACROS = 2
 MAX_MACRO_ACTIONS = 500   # guards against a corrupt/huge macro locking up a thread
 MAX_WAIT_MS = 5000        # guards against a single bogus "wait" entry stalling playback
 
@@ -64,18 +71,23 @@ class MacroPlayer:
 
     def __init__(self) -> None:
         self._active = 0
+        self._active_macros: set[int] = set()
         self._lock = threading.Lock()
 
     def play(self, actions: list[dict[str, Any]]) -> None:
         if not actions:
             return
+        macro_id = id(actions)
         with self._lock:
             if self._active >= MAX_CONCURRENT_MACROS:
                 return
+            if macro_id in self._active_macros:
+                return
             self._active += 1
-        threading.Thread(target=self._run, args=(actions,), name="MacroPlayer", daemon=True).start()
+            self._active_macros.add(macro_id)
+        threading.Thread(target=self._run, args=(actions, macro_id), name="MacroPlayer", daemon=True).start()
 
-    def _run(self, actions: list[dict[str, Any]]) -> None:
+    def _run(self, actions: list[dict[str, Any]], macro_id: int) -> None:
         try:
             for action in actions[:MAX_MACRO_ACTIONS]:
                 kind = action.get("type")
@@ -98,3 +110,4 @@ class MacroPlayer:
         finally:
             with self._lock:
                 self._active -= 1
+                self._active_macros.discard(macro_id)

@@ -12,10 +12,10 @@ Changes made since the latest release that will be included in the next version.
 - 
 
 ### Changed
-- (gui/scripts/macros.py) Reset the macro action list's scroll position to the top when switching macros, so a shorter macro doesn't render as empty below the previous scroll offset 
+- 
 
 ### Fixed
-- 
+- Fixed the macro action list showing leftover empty scroll space after switching to a macro with fewer (or zero) actions. (gui/scripts/macros.py and vader5pro-hid-tools/gui/scripts/ui_utils.py)
 
 ### Removed
 - 

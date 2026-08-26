@@ -15,6 +15,9 @@ Changes made since the latest release that will be included in the next version.
 ### Changed
 - Duplicate GUI launches by bringing the existing window to the foreground instead of opening a second instance. 
   (vader5pro-hid-tools/gui/MainPage.py & vader5pro-hid-tools/gui/single_instance_guard.py)
+- Smart dropdown positioning for macro and profile comboboxes on mapping screen. Now opens downward by default, flips upward when insufficient screen space, scrollbar >5.
+  (gui/scripts/mapping.py)
+
 
 ### Fixed
 - Fixed foreground-window profile automation not reverting to the base profile after the linked program loses focus. 

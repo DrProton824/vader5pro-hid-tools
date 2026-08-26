@@ -238,21 +238,50 @@ def refresh_scroll_region(scrollable_frame) -> None:
 
 
 def scroll_to_top(scrollable_frame) -> None:
-    """Reset a CTkScrollableFrame's scroll position to the top.
-
-    Needed when swapping the frame's contents wholesale (e.g. loading a
-    different macro's actions into fcmevm_macroactions) — otherwise the
-    old scroll offset persists and a shorter list can render as empty
-    until the user scrolls up manually.
+    """Reset a CTkScrollableFrame's scroll position to the top and fix scrollbar.
+    
+    For empty frames, uses a temporary dummy widget to force Tk's geometry
+    manager to fire Configure events and recalculate frame size. Without
+    this, a frame with zero children doesn't trigger geometry updates, leaving
+    the canvas window item (and thus bbox/scrollregion) stuck at stale values
+    from before the last child was removed.
     """
     canvas = getattr(scrollable_frame, "_parent_canvas", None)
+    scrollbar = getattr(scrollable_frame, "_scrollbar", None)
     if canvas is None:
         return
+    
     try:
+        scrollable_frame.update()
+    except tk.TclError:
+        return
+    
+    has_children = bool(scrollable_frame.winfo_children())
+    
+    try:
+        if not has_children:
+            # Tk won't run geometry manager for empty frame. Force it by
+            # adding a minimal dummy, letting geometry settle, then removing.
+            dummy = tk.Frame(scrollable_frame, height=1, width=1)
+            dummy.grid(row=0, column=0)
+            scrollable_frame.update_idletasks()  # geometry manager places dummy
+            dummy.destroy()
+            scrollable_frame.update_idletasks()  # geometry manager removes dummy, frame truly empty now
+        else:
+            scrollable_frame.update_idletasks()
+        
+        # Now bbox("all") reflects actual current state
+        bbox = canvas.bbox("all")
+        canvas.configure(scrollregion=bbox if bbox else (0, 0, 1, 1))
         canvas.yview_moveto(0.0)
+        
+        if scrollbar is not None:
+            if not has_children:
+                scrollbar.set(0.0, 1.0)
+            else:
+                scrollbar.set(*canvas.yview())
     except tk.TclError:
         pass
-    refresh_scroll_region(scrollable_frame)
 
 
 def relayout_list(list_frame, order: list, buttons: dict) -> None:

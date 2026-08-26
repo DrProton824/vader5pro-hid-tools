@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import json
 import sys
+import tkinter as tk
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -115,6 +116,96 @@ def _get_macro_names() -> List[str]:
     return [m["name"] for m in _read_config().get("macros", [])]
 
 
+def _make_smart_reposition(sd, prefer_upward: bool):
+    """Returns a bound _reposition method for a ScrollableDropdown instance
+    that opens upward or downward based on available screen space,
+    and never grows beyond max_visible rows.
+
+    Called from Mapping.on_start to patch the already-constructed
+    ScrollableDropdown instances on fcgafsmm_combobox and fcgi_profile
+    without touching MainPage.py or scrollable_dropdown.py.
+    """
+    def _reposition():
+        try:
+            attach_x  = sd.attach.winfo_rootx()
+            attach_y  = sd.attach.winfo_rooty()
+            attach_h  = sd.attach.winfo_height()
+            w         = max(sd.attach.winfo_width(), 60)
+        except tk.TclError:
+            return
+
+        count   = len(sd._buttons)
+        visible = max(1, min(count, sd.max_visible))
+
+        # Force layout so reqheight is current.
+        try:
+            if sd._inner is not None:
+                sd._inner.update_idletasks()
+        except tk.TclError:
+            pass
+
+        # Per-button rendered height incl. pack pady (1 px each side).
+        if sd._buttons:
+            try:
+                btn_h = sd._buttons[0].winfo_reqheight() + 2
+            except tk.TclError:
+                btn_h = sd.button_height + 4
+        else:
+            btn_h = sd.button_height + 4
+
+        if count <= sd.max_visible:
+            try:
+                inner_h = sd._inner.winfo_reqheight()
+            except tk.TclError:
+                inner_h = visible * btn_h
+            chrome = 4 + 2 * sd.border_width
+            h = inner_h + chrome
+        else:
+            chrome = 4 + 2 * sd.border_width + 16
+            h = visible * btn_h + chrome
+
+        # Resize buttons to match popup width.
+        scrollbar_w = 16 if count > sd.max_visible else 0
+        btn_w = max(w - 2 * sd.border_width - 8 - scrollbar_w, 40)
+        for b in sd._buttons:
+            try:
+                b.configure(width=btn_w)
+            except tk.TclError:
+                pass
+
+        # Get physical screen height, accounting for CTk's set_window_scaling.
+        # winfo_screenheight() returns the scaled value, but attach_y is in
+        # physical pixels. Query Windows directly to get the real monitor height.
+        try:
+            import ctypes
+            scale = ctypes.windll.shcore.GetScaleFactorForDevice(0) / 100
+            screen_h_scaled = sd.attach.winfo_screenheight()
+            screen_h = int(screen_h_scaled * scale)
+        except Exception:
+            try:
+                screen_h = sd.attach.winfo_screenheight()
+            except tk.TclError:
+                screen_h = 1080
+
+        space_below = screen_h - (attach_y + attach_h + sd.offset)
+        space_above = attach_y - sd.offset
+
+        if prefer_upward:
+            if space_above >= h or space_above >= space_below:
+                y = attach_y - h - sd.offset
+            else:
+                y = attach_y + attach_h + sd.offset
+        else:
+            if space_below >= h:
+                y = attach_y + attach_h + sd.offset
+            else:
+                y = attach_y - h - sd.offset
+
+        sd.top.geometry(f"{w}x{h}+{attach_x}+{y}")
+
+    return _reposition
+    
+
 class Mapping(CTkScript):
 
     def on_start(self):
@@ -160,6 +251,33 @@ class Mapping(CTkScript):
 
         self._prune_invalid_macro_assignments()
         self._refresh_assignment_dots()
+        self._patch_dropdowns()
+
+    # Rows visible before a scrollbar kicks in, for both dropdowns.
+    _DROPDOWN_MAX_VISIBLE = 5
+
+    def _patch_dropdowns(self) -> None:
+        """Monkey-patches the ScrollableDropdown instances that MainPage.py
+        attached to fcgafsmm_combobox and fcgi_profile.
+
+        Replaces _reposition with a version that:
+          - respects the screen boundary (never draws off-display)
+          - opens downward by default for both widgets, flipping upward
+            only when there is genuinely no room below
+          - caps visible rows at max_visible with a scrollbar rather than
+            growing the popup indefinitely
+
+        """
+        sd_macro = getattr(self.window.fcgafsmm_combobox, "_scrollable_dropdown", None)
+        if sd_macro is not None:
+            sd_macro._reposition = _make_smart_reposition(sd_macro, prefer_upward=False)
+            sd_macro.configure_style(max_visible=self._DROPDOWN_MAX_VISIBLE)
+
+        sd_profile = getattr(self.window.fcgi_profile, "_scrollable_dropdown", None)
+        if sd_profile is not None:
+            sd_profile._reposition = _make_smart_reposition(sd_profile, prefer_upward=False)
+            sd_profile.configure_style(max_visible=self._DROPDOWN_MAX_VISIBLE)
+
 
     # --- button selection ---
 

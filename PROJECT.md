@@ -12,7 +12,7 @@
 
 ### Medium Priority
 - [ ] Decode battery status
-- [ ] 
+- [ ] Consider ViGEmBus implementation to inject virtual controller buttons
 
 ### Nice to Have
 - [ ] Rumble settings/tests

@@ -54,9 +54,15 @@ import customtkinter as ctk
 from ctkmaker import CTkScript
 
 try:
-    from ui_utils import hide_frame, show_frame, SelectableList, confirm_unsaved_changes, open_macro_action_editor
+    from ui_utils import (
+        hide_frame, show_frame, SelectableList, confirm_unsaved_changes,
+        open_macro_action_editor, scroll_to_top,
+    )
 except ImportError:
-    from .ui_utils import hide_frame, show_frame, SelectableList, confirm_unsaved_changes, open_macro_action_editor
+    from .ui_utils import (
+        hide_frame, show_frame, SelectableList, confirm_unsaved_changes,
+        open_macro_action_editor, scroll_to_top,
+    )
 
 try:
     import keyboard
@@ -306,6 +312,7 @@ class Macros(CTkScript):
         self.window.fcmevmnn_entry1.insert(0, session["display_name"])
         self._draft_actions = [dict(action) for action in session["actions"]]
         self._refresh_action_list()
+        scroll_to_top(self.window.fcmevm_macroactions)
         self._show_editor()
         self.window.fcmevmnn_entry1.focus_set()
 

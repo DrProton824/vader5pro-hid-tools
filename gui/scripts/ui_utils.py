@@ -209,6 +209,30 @@ def animate_hide_frame(window, frame, steps: int = 10, delay_ms: int = 12) -> No
     _step(steps)
 
 
+def scroll_to_top(scrollable_frame: ctk.CTkScrollableFrame) -> None:
+    """Reset a CTkScrollableFrame's scroll position to the top and force
+    its canvas scrollregion to match the frame's *current* content size.
+    """
+    canvas = getattr(scrollable_frame, "_parent_canvas", None)
+    inner = getattr(scrollable_frame, "_parent_frame", None)
+    if canvas is None:
+        return
+
+    scrollable_frame.update_idletasks()
+
+    if inner is not None:
+        inner.update_idletasks()
+        content_height = max(inner.winfo_reqheight(), 1)
+        for item in canvas.find_all():
+            try:
+                canvas.itemconfigure(item, height=content_height)
+            except tk.TclError:
+                pass
+
+    canvas.configure(scrollregion=canvas.bbox("all"))
+    canvas.yview_moveto(0.0)
+    
+
 def relayout_list(list_frame, order: list, buttons: dict) -> None:
     """Grid every button in `order` into `list_frame`, one per row.
 

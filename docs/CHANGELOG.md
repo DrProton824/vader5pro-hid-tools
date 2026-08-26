@@ -12,7 +12,7 @@ Changes made since the latest release that will be included in the next version.
 - 
 
 ### Changed
-- 
+- (gui/scripts/macros.py) Reset the macro action list's scroll position to the top when switching macros, so a shorter macro doesn't render as empty below the previous scroll offset 
 
 ### Fixed
 - 

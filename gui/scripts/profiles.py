@@ -347,6 +347,14 @@ class Profiles(CTkScript):
         self._hide_editor()
 
     def _open_session(self, session_id: str) -> None:
+        if session_id == self._current_session:
+            # Already open. Double-click and the Edit button both route
+            # here without going through _navigation_guard() first (see
+            # _on_list_select and fcplh_edit for the equivalent guard on
+            # the other paths) -- without this, re-opening the same
+            # profile silently reloads its saved name/automation/hotkey,
+            # discarding any unsaved edits in the fields below.
+            return
         self._discard_pending(keep=session_id)
         self._current_session = session_id
         session = self._sessions[session_id]

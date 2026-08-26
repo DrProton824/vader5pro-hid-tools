@@ -131,7 +131,6 @@ def main() -> None:
     sender = InputSender()
     macro_player = MacroPlayer()
     mapper = ButtonMapper(sender, macro_player)
-    mapper.update_bindings(cfg.load_bindings())
 
     status_writer.write(connected=False)  # dongle enumeration visible in the GUI immediately, even before pairing
 
@@ -146,12 +145,45 @@ def main() -> None:
         status_writer.write(connected=connected, battery=None)
 
     # ── Profile automation (hotkey + "start with program") ───────────────────
+    #
+    # profile_state["base"] is the user's manually chosen profile -- set
+    # from the GUI's profile dropdown or a hotkey switch, and persisted to
+    # config.json as "active_profile". profile_state["auto"] is a profile
+    # temporarily applied by foreground-window automation; it is never
+    # persisted, so it reverts cleanly to the base profile once the linked
+    # program loses focus instead of staying stuck active.
+
+    profile_state = {"base": cfg.get_active_profile(), "auto": None}
+
+    def _apply_profile(profile_id: str) -> None:
+        mapper.update_bindings(cfg.load_bindings_for(profile_id))
 
     def _switch_profile(profile_id: str) -> None:
-        if cfg.get_active_profile() == profile_id:
+        """Hotkey-triggered switch -- a deliberate user choice, so it
+        becomes the new base profile and clears any automation override,
+        same as picking a profile in the GUI."""
+        profile_state["base"] = profile_id
+        profile_state["auto"] = None
+        if cfg.get_active_profile() != profile_id:
+            cfg.set_active_profile(profile_id)
+        _apply_profile(profile_id)
+
+    def _apply_foreground_automation(profile_id: str) -> None:
+        """The linked program just became foreground -- apply its profile
+        without persisting it, so losing focus can revert cleanly."""
+        if profile_id == profile_state["auto"]:
             return
-        cfg.set_active_profile(profile_id)
-        mapper.update_bindings(cfg.load_bindings())
+        profile_state["auto"] = profile_id
+        _apply_profile(profile_id)
+
+    def _revert_foreground_automation() -> None:
+        """No automated program is foreground anymore -- restore the base profile."""
+        if profile_state["auto"] is None:
+            return
+        profile_state["auto"] = None
+        _apply_profile(profile_state["base"])
+
+    _apply_profile(profile_state["base"])
 
     hotkeys_by_profile, exe_by_profile = cfg.get_automation_targets()
 
@@ -159,7 +191,10 @@ def main() -> None:
     hotkey_watcher.reload(hotkeys_by_profile)
     hotkey_watcher.start()
 
-    foreground_watcher = ForegroundWatcherThread(on_match=_switch_profile)
+    foreground_watcher = ForegroundWatcherThread(
+        on_match=_apply_foreground_automation,
+        on_unmatch=_revert_foreground_automation,
+    )
     foreground_watcher.reload(exe_by_profile)
     foreground_watcher.start()
 
@@ -183,7 +218,20 @@ def main() -> None:
         while not stop_event.is_set():
             time.sleep(CONFIG_POLL_INTERVAL)
             if watcher.changed():
-                mapper.update_bindings(cfg.load_bindings())
+                new_base = cfg.get_active_profile()
+                if new_base != profile_state["base"]:
+                    # active_profile changed on disk (e.g. the GUI's profile
+                    # dropdown) -- treat it like a hotkey switch: it becomes
+                    # the new base and clears any automation override.
+                    profile_state["base"] = new_base
+                    profile_state["auto"] = None
+                    _apply_profile(new_base)
+                else:
+                    # Just a binding/macro edit -- re-apply whichever
+                    # profile is currently live (the automation override
+                    # if one is active, otherwise the base) so the change
+                    # shows up immediately.
+                    _apply_profile(profile_state["auto"] or profile_state["base"])
                 hotkeys_by_profile, exe_by_profile = cfg.get_automation_targets()
                 hotkey_watcher.reload(hotkeys_by_profile)
                 foreground_watcher.reload(exe_by_profile)
@@ -198,10 +246,11 @@ def main() -> None:
     # ── Tray icon ─────────────────────────────────────────────────────────────
 
     def _find_config_exe() -> pathlib.Path | None:
-        """Locate the GUI exe next to this one by content, not filename,
-        so renaming either .exe (keeping both in the same folder) still
-        works. Falls back to VaderConfig.exe as a tie-breaker if more
-        than one other .exe is present."""
+        """Locate the GUI exe next to this one without relying on a fixed
+        filename, so renaming either .exe (as long as both stay in the same
+        folder) doesn't break "Open Config" / "About". Picks the only other
+        .exe in the folder; if there's more than one candidate, prefers one
+        still named VaderConfig.exe (unrenamed) as a tie-breaker."""
         self_path = pathlib.Path(sys.executable).resolve()
         candidates = [p for p in _ROOT.glob("*.exe") if p.resolve() != self_path]
         if not candidates:
@@ -212,24 +261,34 @@ def main() -> None:
             if p.name.lower() == "vaderconfig.exe":
                 return p
         return candidates[0]
-   
-    def _open_config() -> None:
+
+    def _launch_gui(*extra_args: str) -> None:
         config_exe = _find_config_exe()
         try:
             if config_exe is not None:
-                subprocess.Popen([str(config_exe)], cwd=str(_ROOT))
+                subprocess.Popen([str(config_exe), *extra_args], cwd=str(_ROOT))
             else:
-                # Running from source, or no companion .exe found – fall
+                # Running from source, or no companion .exe found - fall
                 # back to launching the module directly. MainPage.py lives
                 # under gui/, so both the script path and the cwd it runs
                 # from need to point there, not at _ROOT.
                 gui_main = _ROOT / "gui" / "MainPage.py"
                 subprocess.Popen(
-                    [sys.executable, str(gui_main)],
+                    [sys.executable, str(gui_main), *extra_args],
                     cwd=str(gui_main.parent),
                 )
         except Exception:
             pass
+
+    def _open_config() -> None:
+        _launch_gui()
+
+    def _open_about() -> None:
+        # If the GUI is already running, this just brings the existing
+        # window to the foreground (see gui/single_instance_guard.py) --
+        # it won't jump that already-running instance to the About page,
+        # only a freshly started one.
+        _launch_gui("--about")
 
     def _quit() -> None:
         stop_event.set()
@@ -244,6 +303,7 @@ def main() -> None:
         disconnected_icon_path=_ICON_DIR / "service_disconnected.ico",
         menu_items=[
             ("Open Config", _open_config),
+            ("About", _open_about),
             ("Exit", _quit),
         ],
     )

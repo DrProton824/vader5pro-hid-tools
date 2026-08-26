@@ -17,6 +17,27 @@ else:
     _os.chdir(_gui_dir)
     _sys.path.insert(0, str(_gui_dir.parent))
 
+# Single instance guard: a second launch brings the existing window to
+# the foreground instead of opening a duplicate one. Implementation
+# lives in gui/single_instance_guard.py — a hand-authored file outside
+# the CTkMaker export, never touched by this script. Must run before
+# ctk.CTk() creates a window.
+from single_instance_guard import ensure_single_instance
+
+if not ensure_single_instance():
+    _sys.exit(0)
+
+# Version label shown in the window title and on the About page (see
+# _patch_mainpage_body's ABOUT_TEXT_OLD/NEW below). service/version.py
+# is stamped with the real version at build time (see build/build.py).
+try:
+    from service.version import VERSION
+except ImportError:
+    VERSION = "dev"
+
+_VERSION_LABEL = f"v{VERSION}" if VERSION != "dev" else "(dev)"
+APP_TITLE = f"   Vader5Mapper {_VERSION_LABEL}"
+
 # DPI-awareness fix for Vader5Mapper.
 #
 # Must run in CTkMaker's generated main.py, before ctk.CTk() creates the
@@ -3650,7 +3671,7 @@ class Vader5mapper(ctk.CTk):
         )
         self.fcav_richtext.pack(side="top", fill="both", expand=True, pady=2)
         self.fcav_richtext._ctkmaker_min = 20
-        self.fcav_richtext.set_text("<b><size=17>Flydigi Vader 5 Pro Remapper</size></b>\n\n<size=13>A lightweight, portable remapping tool for the <b>Flydigi Vader 5 Pro</b>.</size>\n\n<size=13>It enables remapping of the controller's <color=#7DABC3>vendor-specific buttons</color> (M1–M4, \nLM/RM, C/Z, Home, Share/Fn, Start and Select) to custom keyboard shortcuts \nand key combinations unavailable through XInput and Flydigi Software.</size>\n\n<size=13>Designed to <color=#7DABC3>complement</color> Flydigi SpaceStation rather than replace it.  \nThe application focuses on advanced button remapping while remaining  \nportable, no installation, registry entries, or AppData are files required. \nCan fully run with or without Flydigi SpaceStation and Drivers installed. </size>\n\n\n\n<b><size=15>GitHub</size></b>\n<size=13><color=#7DABC3>github.com/DrProton824/vader5pro-hid-tools</color></size>\n\n<size=13>Developed by <b>DrProton824</b> \nOpen Source (MIT Licensed)</size>\n")
+        self.fcav_richtext.set_text(f"<b><size=17>Flydigi Vader 5 Pro Remapper {_VERSION_LABEL}</size></b>\n\n<size=13>A lightweight, portable remapping tool for the <b>Flydigi Vader 5 Pro</b>.</size>\n\n<size=13>It enables remapping of the controller's <color=#7DABC3>vendor-specific buttons</color> (M1–M4, \nLM/RM, C/Z, Home, Share/Fn, Start and Select) to custom keyboard shortcuts \nand key combinations unavailable through XInput and Flydigi Software.</size>\n\n<size=13>Designed to <color=#7DABC3>complement</color> Flydigi SpaceStation rather than replace it.  \nThe application focuses on advanced button remapping while remaining  \nportable, no installation, registry entries, or AppData are files required. \nCan fully run with or without Flydigi SpaceStation and Drivers installed. </size>\n\n\n\n<b><size=15>GitHub</size></b>\n<size=13><color=#7DABC3>github.com/DrProton824/vader5pro-hid-tools</color></size>\n\n<size=13>Developed by <b>DrProton824</b> \nOpen Source (MIT Licensed)</size>\n")
 
         self.fca_vbox.bind("<Configure>", lambda _e, _c=self.fca_vbox: ctk.balance_pack(_c, 'height'))
 
@@ -3676,4 +3697,7 @@ class Vader5mapper(ctk.CTk):
 if __name__ == "__main__":
     ctk.set_appearance_mode("dark")
     app = Vader5mapper()
+    app.title(APP_TITLE)
+    if "--about" in _sys.argv:
+        app._script_0._show_page("fc_about")
     app.mainloop()

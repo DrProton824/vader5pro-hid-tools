@@ -50,6 +50,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import tkinter as tk
 import customtkinter as ctk
 from ctkmaker import CTkScript
 
@@ -302,6 +303,14 @@ class Macros(CTkScript):
         self._hide_editor()
 
     def _open_session(self, session_key: str) -> None:
+        if session_key == self._current_session:
+            # Already open. Double-click and the Edit button both route
+            # here without going through _navigation_guard() first (see
+            # _on_list_select and fcmvh_edit for the equivalent guard on
+            # the other paths) -- without this, re-opening the same
+            # macro silently reloads session["actions"], discarding any
+            # unsaved edits in self._draft_actions/the name field.
+            return
         if self._recording:
             self.fcmevhr_stop()
         self._discard_pending(keep=session_key)
@@ -377,13 +386,13 @@ class Macros(CTkScript):
         list_frame = self.window.fcmevm_macroactions
         for child in list_frame.winfo_children():
             child.destroy()
-    
+
         self._action_list.buttons = {}
         self._action_list.order = []
         self._action_list.selected = set()
         self._action_list.anchor = None
         self._action_by_key = {}
-    
+
         for action in self._draft_actions:
             key = uuid.uuid4().hex
             self._action_by_key[key] = action
@@ -402,6 +411,13 @@ class Macros(CTkScript):
             self._action_list.add_batch(key, self._describe_action(action))
         
         self._action_list.relayout()
+
+        canvas = getattr(self.window.fcmevm_macroactions, "_parent_canvas", None)
+        if canvas is not None:
+            try:
+                canvas.yview_moveto(1.0)
+            except tk.TclError:
+                pass
 
     @staticmethod
     def _describe_action(action: Dict[str, Any]) -> str:

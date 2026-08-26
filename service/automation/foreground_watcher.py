@@ -17,6 +17,13 @@ WINEVENT_OUTOFCONTEXT delivers the callback on this thread's own
 message queue, so -- same as hotkey_watcher.HotkeyWatcherThread -- it
 needs its own dedicated hidden window and GetMessageW loop, and must
 not share one with tray.py or the raw input reader.
+
+on_unmatch fires whenever the foreground window changes to something
+that isn't one of the watched programs, so callers can revert a
+profile that automation applied while that program was focused (see
+service/main.py's _revert_foreground_automation). It's a plain
+per-event signal, not per-target -- main.py decides whether a revert
+is actually needed.
 """
 
 from __future__ import annotations
@@ -121,9 +128,14 @@ class ForegroundWatcherThread(threading.Thread):
 
     _CLASS_NAME = "VaderRemapperForegroundWndClass"
 
-    def __init__(self, on_match: Callable[[str], None]) -> None:
+    def __init__(
+        self,
+        on_match: Callable[[str], None],
+        on_unmatch: Optional[Callable[[], None]] = None,
+    ) -> None:
         super().__init__(name="ForegroundWatcher", daemon=True)
         self._on_match = on_match
+        self._on_unmatch = on_unmatch
         self._hwnd: Optional[int] = None
         self._hook: Optional[int] = None
         self._wndproc_ref = WNDPROC(self._wndproc)
@@ -197,6 +209,11 @@ class ForegroundWatcherThread(threading.Thread):
         if profile_id:
             try:
                 self._on_match(profile_id)
+            except Exception:
+                pass
+        elif self._on_unmatch is not None:
+            try:
+                self._on_unmatch()
             except Exception:
                 pass
 

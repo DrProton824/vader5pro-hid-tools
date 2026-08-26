@@ -223,26 +223,20 @@ def load() -> Mapping:
 Binding = dict[str, Any]
 
 
-def load_bindings() -> dict[str, Binding]:
+def load_bindings_for(profile_id: str) -> dict[str, Binding]:
     """
-    Return the active profile's mapping resolved to executable bindings:
-
-        {button: {"type": "keybind", "value": "<shortcut>"}}
-        {button: {"type": "macro", "actions": [<recorded actions>]}}
-
-    Macro names are resolved against the top-level "macros" list here, so
-    callers (ButtonMapper) never need to know the config schema — a
-    button with a macro assignment pointing at a since-deleted or
-    since-renamed macro just resolves to an empty action list. Never
-    raises.
+    Same as load_bindings(), but for an explicit profile id instead of the
+    persisted active_profile. Used by foreground-window profile automation
+    (see service/main.py) to apply a profile's bindings temporarily without
+    persisting it as the user's chosen active profile, so it can be cleanly
+    reverted once the linked program loses focus. Never raises.
     """
     try:
         data = load_config()
     except Exception:
         return {button: {"type": "keybind", "value": ""} for button in MAPPABLE_BUTTONS}
 
-    active_id = data.get("active_profile", DEFAULT_PROFILE_ID)
-    profile = next((p for p in data.get("profiles", []) if p["id"] == active_id), None)
+    profile = next((p for p in data.get("profiles", []) if p["id"] == profile_id), None)
     raw_mapping = (profile or {}).get("mapping", {})
     macros_by_name = {m.get("name"): m.get("actions", []) for m in data.get("macros", [])}
 
@@ -260,6 +254,26 @@ def load_bindings() -> dict[str, Binding]:
             bindings[button] = {"type": "keybind", "value": ""}
 
     return bindings
+
+
+def load_bindings() -> dict[str, Binding]:
+    """
+    Return the active profile's mapping resolved to executable bindings:
+
+        {button: {"type": "keybind", "value": "<shortcut>"}}
+        {button: {"type": "macro", "actions": [<recorded actions>]}}
+
+    Macro names are resolved against the top-level "macros" list here, so
+    callers (ButtonMapper) never need to know the config schema — a
+    button with a macro assignment pointing at a since-deleted or
+    since-renamed macro just resolves to an empty action list. Never
+    raises.
+    """
+    try:
+        active_id = get_active_profile()
+    except Exception:
+        active_id = DEFAULT_PROFILE_ID
+    return load_bindings_for(active_id)
 
 
 def load_settings() -> Settings:

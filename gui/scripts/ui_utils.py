@@ -209,29 +209,51 @@ def animate_hide_frame(window, frame, steps: int = 10, delay_ms: int = 12) -> No
     _step(steps)
 
 
-def scroll_to_top(scrollable_frame: ctk.CTkScrollableFrame) -> None:
-    """Reset a CTkScrollableFrame's scroll position to the top and force
-    its canvas scrollregion to match the frame's *current* content size.
+def refresh_scroll_region(scrollable_frame) -> None:
+    """Recompute a CTkScrollableFrame's scrollbar range against its
+    current contents.
+
+    Needed after adding/removing rows — left stale, an emptied list keeps
+    the scrollbar range/thumb size from before the last item was removed,
+    since customtkinter only recomputes it off a <Configure> event that a
+    frame with zero remaining children doesn't reliably fire on its own.
+    Safe no-op if the frame hasn't been laid out yet or customtkinter's
+    internal canvas attribute isn't present (version differences).
     """
     canvas = getattr(scrollable_frame, "_parent_canvas", None)
-    inner = getattr(scrollable_frame, "_parent_frame", None)
     if canvas is None:
         return
+    try:
+        # If the inner frame has no children, reset unconditionally
+        if not scrollable_frame.winfo_children():
+            canvas.configure(scrollregion=(0, 0, 0, 0))
+            scrollable_frame.update_idletasks()
+            canvas.configure(scrollregion=(0, 0, 0, 0))
+            return
+        scrollable_frame.update_idletasks()
+        bbox = canvas.bbox("all")
+        canvas.configure(scrollregion=bbox if bbox else (0, 0, 0, 0))
+    except tk.TclError:
+        pass
 
-    scrollable_frame.update_idletasks()
 
-    if inner is not None:
-        inner.update_idletasks()
-        content_height = max(inner.winfo_reqheight(), 1)
-        for item in canvas.find_all():
-            try:
-                canvas.itemconfigure(item, height=content_height)
-            except tk.TclError:
-                pass
+def scroll_to_top(scrollable_frame) -> None:
+    """Reset a CTkScrollableFrame's scroll position to the top.
 
-    canvas.configure(scrollregion=canvas.bbox("all"))
-    canvas.yview_moveto(0.0)
-    
+    Needed when swapping the frame's contents wholesale (e.g. loading a
+    different macro's actions into fcmevm_macroactions) — otherwise the
+    old scroll offset persists and a shorter list can render as empty
+    until the user scrolls up manually.
+    """
+    canvas = getattr(scrollable_frame, "_parent_canvas", None)
+    if canvas is None:
+        return
+    try:
+        canvas.yview_moveto(0.0)
+    except tk.TclError:
+        pass
+    refresh_scroll_region(scrollable_frame)
+
 
 def relayout_list(list_frame, order: list, buttons: dict) -> None:
     """Grid every button in `order` into `list_frame`, one per row.
@@ -500,6 +522,7 @@ class SelectableList:
     def relayout(self) -> None:
         relayout_list(self.list_frame, self.order, self.buttons)
         self._highlight()
+        refresh_scroll_region(self.list_frame)
 
     # --- selection ---
 

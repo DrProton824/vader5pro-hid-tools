@@ -28,8 +28,8 @@ if not ensure_single_instance():
     _sys.exit(0)
 
 # Version label shown in the window title and on the About page (see
-# _patch_mainpage_body's ABOUT_TEXT_OLD/NEW below). service/version.py
-# is stamped with the real version at build time (see build/build.py).
+# _patch_mainpage_about below). service/version.py is stamped with
+# the real version at build time (see build/build.py).
 try:
     from service.version import VERSION
 except ImportError:
@@ -597,6 +597,7 @@ class Vader5mapper(ctk.CTk):
             dropdown_fg_color='#2b2b2b',
             dropdown_hover_color='#3a3a3a',
             dropdown_text_color='#dce4ee',
+            justify='center',
             text_color='#f5f5f5',
             text_color_disabled='#9298a1',
             font=ctk.CTkFont(size=15, weight="normal", slant="roman"),
@@ -611,7 +612,7 @@ class Vader5mapper(ctk.CTk):
             text_color='#dce4ee',
             hover_color='#3a3a3a',
             offset=4,
-            button_align='left',
+            button_align='center',
             max_visible=8,
             border_width=1,
             border_color='#2b2b2b',
@@ -1068,7 +1069,7 @@ class Vader5mapper(ctk.CTk):
             height=50,
             corner_radius=5,
             border_width=2,
-            values=['Keybind', 'Macros'],
+            values=['Keybind', ' Macro '],
             fg_color='#666c70',
             selected_color='#7dabc3',
             selected_hover_color='#e0b76c',
@@ -1291,7 +1292,7 @@ class Vader5mapper(ctk.CTk):
             cursor='',
             takefocus=False,
             fg_color='transparent',
-            text='ACTION',
+            text='MACRO',
             font_wrap=True,
             justify='center',
             text_color='#9298a1',
@@ -1326,7 +1327,7 @@ class Vader5mapper(ctk.CTk):
             corner_radius=6,
             border_width=2,
             border_color='#666c70',
-            values=['dynamic_list_macros'],
+            values=['      Select Macro ...'],
             fg_color='#343638',
             button_color='#666c70',
             button_hover_color='#7a848d',
@@ -1341,7 +1342,7 @@ class Vader5mapper(ctk.CTk):
         self.fcgafsmm_combobox.pack(side="top", fill="x", pady=2)
         self.fcgafsmm_combobox._ctkmaker_min = 60
         self.fcgafsmm_combobox._ctkmaker_fixed = True
-        self.fcgafsmm_combobox.set('dynamic_list_macros')
+        self.fcgafsmm_combobox.set('      Select Macro ...')
         self.fcgafsmm_combobox._scrollable_dropdown = ScrollableDropdown(
             self.fcgafsmm_combobox,
             font=self.fcgafsmm_combobox.cget("font"),
@@ -1553,7 +1554,7 @@ class Vader5mapper(ctk.CTk):
             cursor='',
             takefocus=False,
             fg_color='transparent',
-            text='ACTION',
+            text='KEYBIND',
             font_wrap=True,
             justify='center',
             text_color='#9298a1',
@@ -3697,6 +3698,8 @@ class Vader5mapper(ctk.CTk):
 if __name__ == "__main__":
     ctk.set_appearance_mode("dark")
     app = Vader5mapper()
+    from single_instance_guard import start_pipe_listener
+    start_pipe_listener(app)
     app.title(APP_TITLE)
     if "--about" in _sys.argv:
         app._script_0._show_page("fc_about")

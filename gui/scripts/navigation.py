@@ -144,8 +144,10 @@ class Navigation(CTkScript):
         self._show_page("fc_about")
 
     def fcgaf_segmentbutton(self, val: str = None):
-        # CTkMaker's exporter sometimes emits this call without the new
-        # value — fall back to reading it straight off the widget.
         if val is None:
             val = self.window.fcgaf_segmentbutton.get()
-        getattr(self.window, MAPPING_MODES[val]).tkraise()
+
+        values = tuple(self.window.fcgaf_segmentbutton.cget("values"))
+        index = values.index(val)
+
+        getattr(self.window, tuple(MAPPING_MODES.values())[index]).tkraise()

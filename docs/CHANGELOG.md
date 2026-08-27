@@ -9,23 +9,26 @@ All notable changes to this project are documented in this file.
 Changes made since the latest release that will be included in the next version.
 
 ### Added
--  Added the application version to the application title and About page for consistent version identification.
-  (vader5pro-hid-tools/gui/MainPage.py)
+-  Added the application version to the application title and about page for consistent version identification.
+  (gui/MainPage.py)
 
 ### Changed
-- Duplicate GUI launches by bringing the existing window to the foreground instead of opening a second instance. 
-  (vader5pro-hid-tools/gui/MainPage.py & vader5pro-hid-tools/gui/single_instance_guard.py)
-- Smart dropdown positioning for macro and profile comboboxes on mapping screen. Now opens downward by default, flips upward when insufficient screen space, scrollbar >5.
+- Duplicate GUI launches now bring the existing window to the front instead of opening a second one. 
+  (gui/MainPage.py & gui/single_instance_guard.py)
+- Smart dropdown positioning for macro and profile comboboxes on mapping screen. Dropdown now opens downward by default but flips upward when insufficient screen space is available. Added scrollbar for more than >5 entries.
   (gui/scripts/mapping.py)
+- Minor GUI adjustments
+  (gui/MainPage.py)
 
 
 ### Fixed
-- Fixed foreground-window profile automation not reverting to the base profile after the linked program loses focus. 
+- Fixed profile automation not reverting to the selected base profile after the linked program loses focus. 
   (service/automation/foreground_watcher.py & shared/config.py)
-- Fixed the macro action list showing leftover empty scroll space after switching to a macro with fewer (or zero) actions. 
-  (gui/scripts/macros.py & vader5pro-hid-tools/gui/scripts/ui_utils.py)
+- Fixed the macro action list showing leftover empty scroll space after switching to a macro with fewer actions. 
+  (gui/scripts/macros.py & gui/scripts/ui_utils.py)
 - Fixed an issue where double-clicking or editing the currently open macro/profile could discard unsaved changes by reloading the last-saved state. 
-  (gui/scripts/macros.py & vader5pro-hid-tools/gui/scripts/profiles.py)
+  (gui/scripts/macros.py & gui/scripts/profiles.py)
+  
 
 ### Removed
 - 

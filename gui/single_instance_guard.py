@@ -8,98 +8,197 @@ Mirrors service/single_instance.py's named-mutex approach (see that module's
 docstring for why a mutex over a lock file), under its own mutex name so the
 GUI and the service guard independently.
 
-Unlike the service - which just shows a message box and exits when already
-running - a second GUI launch should feel like clicking the taskbar icon:
-locate the existing window by its title and bring it to the foreground
-instead of doing nothing or showing an error.
-
-Argtypes/restype are declared explicitly on every user32 call below - same
-reasoning as tray.py's LRESULT/WPARAM/LPARAM comment: HWND is pointer-sized
-(8 bytes on x64), and ctypes silently truncates it to a 32-bit int for any
-call left without a declared argtype.
+A second GUI launch should feel like clicking the taskbar icon: the second
+process signals the first over a named pipe, and the first process raises
+itself from within its own Tkinter event loop via window.after(). Because
+the raise happens inside the process that owns the window, Windows grants
+it foreground rights without the restrictions a background process would
+hit calling SetForegroundWindow directly.
 """
 
 from __future__ import annotations
 
 import ctypes
 import ctypes.wintypes as wt
-from typing import Optional
+import threading
 
 from service import single_instance
 
 MUTEX_NAME = "VaderRemapperConfig"
+PIPE_NAME = r"\\.\pipe\VaderRemapperConfigRaise"
+RAISE_SIGNAL = b"RAISE"
 
-# Matched as a prefix, not exact equality, so the version suffix appended
-# to the window title (see MainPage.py's APP_TITLE) doesn't break the lookup.
-WINDOW_TITLE_MARKER = "Vader5Mapper"
-
-SW_RESTORE = 9
-
-LPARAM = ctypes.c_ssize_t
-WNDENUMPROC = ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, LPARAM)
+# Delay before raising, after receiving the signal. The launch that
+# triggers this (double-click, taskbar relaunch) may still have input
+# in flight when the signal arrives; raising too early can let that
+# stray click land on the now-foregrounded window.
+RAISE_DELAY_MS = 250
 
 try:
     user32 = ctypes.windll.user32
-    user32.EnumWindows.argtypes = [WNDENUMPROC, LPARAM]
-    user32.EnumWindows.restype = wt.BOOL
-    user32.GetWindowTextLengthW.argtypes = [wt.HWND]
-    user32.GetWindowTextLengthW.restype = ctypes.c_int
-    user32.GetWindowTextW.argtypes = [wt.HWND, wt.LPWSTR, ctypes.c_int]
-    user32.GetWindowTextW.restype = ctypes.c_int
-    user32.IsIconic.argtypes = [wt.HWND]
-    user32.IsIconic.restype = wt.BOOL
-    user32.ShowWindow.argtypes = [wt.HWND, ctypes.c_int]
-    user32.ShowWindow.restype = wt.BOOL
+    kernel32 = ctypes.windll.kernel32
+
     user32.SetForegroundWindow.argtypes = [wt.HWND]
     user32.SetForegroundWindow.restype = wt.BOOL
+    user32.GetForegroundWindow.argtypes = []
+    user32.GetForegroundWindow.restype = wt.HWND
+    user32.GetWindowThreadProcessId.argtypes = [wt.HWND, ctypes.POINTER(wt.DWORD)]
+    user32.GetWindowThreadProcessId.restype = wt.DWORD
+    user32.AttachThreadInput.argtypes = [wt.DWORD, wt.DWORD, wt.BOOL]
+    user32.AttachThreadInput.restype = wt.BOOL
+
+    kernel32.GetCurrentThreadId.argtypes = []
+    kernel32.GetCurrentThreadId.restype = wt.DWORD
 except AttributeError:
-    user32 = None  # not on Windows
+    user32 = None
+    kernel32 = None
 
 
-def _find_existing_window() -> Optional[int]:
-    if user32 is None:
-        return None
+# ---------------------------------------------------------------------------
+# Second-process side: signal the existing instance and exit.
+# ---------------------------------------------------------------------------
 
-    found = {"hwnd": None}
+def _signal_existing_instance() -> None:
+    """Send the raise signal to the first instance's named pipe.
 
-    def _enum_proc(hwnd, _lparam):
-        length = user32.GetWindowTextLengthW(hwnd)
-        if length == 0:
-            return True
-        buf = ctypes.create_unicode_buffer(length + 1)
-        user32.GetWindowTextW(hwnd, buf, length + 1)
-        if buf.value.strip().startswith(WINDOW_TITLE_MARKER):
-            found["hwnd"] = hwnd
-            return False
-        return True
+    Best-effort: if pywin32 isn't available or the pipe isn't ready
+    yet, this silently does nothing and the second launch just exits.
+    """
+    try:
+        import win32file  # type: ignore
+        handle = win32file.CreateFile(
+            PIPE_NAME,
+            win32file.GENERIC_WRITE,
+            0, None,
+            win32file.OPEN_EXISTING,
+            0, None,
+        )
+        win32file.WriteFile(handle, RAISE_SIGNAL)
+        win32file.CloseHandle(handle)
+    except Exception:
+        pass
 
-    user32.EnumWindows(WNDENUMPROC(_enum_proc), 0)
-    return found["hwnd"]
+
+# ---------------------------------------------------------------------------
+# First-process side: listen on the named pipe and raise when signalled.
+# ---------------------------------------------------------------------------
+
+def _raise_window(window) -> None:
+    """Bring the GUI window to the foreground. Runs on the Tkinter main
+    thread via window.after(), so it's safe to touch widgets here.
+    """
+    try:
+        hwnd = int(window.frame(), 16)
+    except Exception:
+        hwnd = None
+
+    try:
+        window.deiconify()
+        window.attributes("-topmost", True)
+        window.lift()
+        window.focus_force()
+    except Exception:
+        pass
+
+    # SetForegroundWindow alone is denied unless the calling thread
+    # owns the current foreground. AttachThreadInput temporarily merges
+    # input state with the foreground thread so the transfer succeeds -
+    # safe here since we're on our own main thread, not an unrelated
+    # background thread with a popup of its own in flight.
+    if hwnd is not None and user32 is not None and kernel32 is not None:
+        try:
+            fg_hwnd = user32.GetForegroundWindow()
+            our_tid = kernel32.GetCurrentThreadId()
+            fg_tid = user32.GetWindowThreadProcessId(fg_hwnd, None)
+
+            attached = False
+            if fg_tid and fg_tid != our_tid:
+                attached = bool(user32.AttachThreadInput(fg_tid, our_tid, True))
+
+            try:
+                user32.SetForegroundWindow(hwnd)
+            finally:
+                if attached:
+                    user32.AttachThreadInput(fg_tid, our_tid, False)
+        except Exception:
+            pass
+
+    try:
+        window.after(100, lambda: window.attributes("-topmost", False))
+    except Exception:
+        pass
 
 
-def _bring_to_front(hwnd: int) -> None:
-    if user32 is None:
-        return
-    if user32.IsIconic(hwnd):
-        user32.ShowWindow(hwnd, SW_RESTORE)
-    user32.SetForegroundWindow(hwnd)
+def _pipe_listener(window, stop_event: threading.Event) -> None:
+    """Block on a named pipe server, raising the window each time a
+    second instance connects and sends the raise signal.
+    """
+    PIPE_ACCESS_INBOUND = 0x00000001
+    PIPE_TYPE_MESSAGE = 0x00000004
+    PIPE_READMODE_MESSAGE = 0x00000002
+    PIPE_WAIT = 0x00000000
+    NMPWAIT_USE_DEFAULT_WAIT = 0
+    INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
 
+    while not stop_event.is_set():
+        pipe = kernel32.CreateNamedPipeW(
+            PIPE_NAME,
+            PIPE_ACCESS_INBOUND,
+            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT,
+            1,  # max instances
+            512, 512,
+            NMPWAIT_USE_DEFAULT_WAIT,
+            None,
+        )
+        if pipe == INVALID_HANDLE_VALUE:
+            break
+
+        kernel32.ConnectNamedPipe(pipe, None)  # blocks until a client connects
+        if stop_event.is_set():
+            kernel32.CloseHandle(pipe)
+            break
+
+        buf = (ctypes.c_char * 512)()
+        read = ctypes.c_ulong(0)
+        ok = kernel32.ReadFile(pipe, buf, 512, ctypes.byref(read), None)
+        kernel32.CloseHandle(pipe)
+
+        if ok and buf.raw[: read.value] == RAISE_SIGNAL:
+            try:
+                window.after(RAISE_DELAY_MS, lambda: _raise_window(window))
+            except Exception:
+                pass
+
+
+def start_pipe_listener(window) -> threading.Thread:
+    """Start the background pipe-listener thread. Call once from
+    MainPage.py after the Tkinter root window exists.
+    """
+    stop_event = threading.Event()
+    thread = threading.Thread(
+        target=_pipe_listener,
+        args=(window, stop_event),
+        daemon=True,
+        name="SingleInstancePipeListener",
+    )
+    thread.start()
+    window._pipe_stop_event = stop_event  # keep alive, allow future cleanup
+    return thread
+
+
+# ---------------------------------------------------------------------------
+# Entry point called before ctk.CTk() in MainPage.py
+# ---------------------------------------------------------------------------
 
 def ensure_single_instance() -> bool:
     """
     Returns True if this process should continue starting up.
 
-    Returns False if another instance is already running - the existing
-    window has been brought to the foreground (best-effort) and the
-    caller should exit immediately without creating a second window.
+    Returns False if another instance is already running — it has been
+    signalled to raise itself, and the caller should exit immediately.
     """
     if single_instance.acquire(MUTEX_NAME):
         return True
 
-    hwnd = _find_existing_window()
-    if hwnd is not None:
-        try:
-            _bring_to_front(hwnd)
-        except Exception:
-            pass
+    _signal_existing_instance()
     return False

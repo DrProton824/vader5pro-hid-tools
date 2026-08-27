@@ -366,13 +366,18 @@ class Mapping(CTkScript):
 
         if assignment.get("type") == "keybind":
             self.window.fcgafskk_entry.insert(0, assignment.get("value", ""))
-            self._set_mapping_mode("Keybind")
+            self._set_mapping_mode(
+                self.window.fcgaf_segmentbutton.cget("values")[0]
+            )
         elif assignment.get("type") == "macro":
             self.window.fcgafsmm_combobox.set(assignment.get("value", ""))
-            self._set_mapping_mode("Macros")
+            self._set_mapping_mode(
+                self.window.fcgaf_segmentbutton.cget("values")[1]
+            )
 
     def _mode_to_kind(self, mode: str) -> str:
-        return "macro" if mode == "Macros" else "keybind"
+        values = tuple(self.window.fcgaf_segmentbutton.cget("values"))
+        return "macro" if values.index(mode) == 1 else "keybind"
 
     def _apply_segment_color(self, mode: str) -> None:
         # fcgaf_segmentbutton's colors come from the .ctkproj as fixed
@@ -398,7 +403,11 @@ class Mapping(CTkScript):
 
     def _set_mapping_mode(self, mode: str) -> None:
         self.window.fcgaf_segmentbutton.set(mode)
-        getattr(self.window, MAPPING_MODES[mode]).tkraise()
+
+        values = tuple(self.window.fcgaf_segmentbutton.cget("values"))
+        index = values.index(mode)
+
+        getattr(self.window, tuple(MAPPING_MODES.values())[index]).tkraise()
         if self._controller:
             self._controller.set_highlight_kind(self._mode_to_kind(mode))
         self._apply_segment_color(mode)
@@ -461,9 +470,10 @@ class Mapping(CTkScript):
         self._save_assignment("macro", val)
 
     def fcgaf_segmentbutton(self, val: str) -> None:
-        # Programmatic .set() calls from _set_mapping_mode don't trigger
-        # this event, so that path updates the canvas/segment color itself.
-        getattr(self.window, MAPPING_MODES[val]).tkraise()
+        values = tuple(self.window.fcgaf_segmentbutton.cget("values"))
+        index = values.index(val)
+
+        getattr(self.window, tuple(MAPPING_MODES.values())[index]).tkraise()
         if self._controller:
             self._controller.set_highlight_kind(self._mode_to_kind(val))
         self._apply_segment_color(val)

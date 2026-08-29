@@ -89,16 +89,24 @@ except ImportError:
 
 RECORD_REFRESH_THROTTLE_MS = 120  # coalesces bursts of key events (auto-repeat) into fewer list rebuilds
 
+# Nav-cluster scan codes that need "extended": true recorded when they're
+# the dedicated key rather than the numpad acting as navigation (Num Lock
+# off) — see service/mapping/extended_keys.py's NAV_CLUSTER, which this
+# must stay in sync with. Duplicated here rather than imported since gui/
+# and service/ aren't assumed to share an import path.
+_NAV_CLUSTER_SCAN_CODES = {71, 72, 73, 75, 77, 79, 80, 81, 82, 83}
+
 SCAN_CODE_TO_NAME = {
     # Modifiers
-    42: "shift",           # Left Shift
-    54: "shift",           # Right Shift  
-    29: "left ctrl",       # Left Ctrl
-    97: "right ctrl",      # Right Ctrl
-    91: "left windows",    # Left Windows
-    92: "right windows",   # Right Windows
-    56: "alt",             # Left Alt
-    100: "alt gr",         # Right Alt / AltGr
+    42: "shift",       # Left Shift
+    54: "shift",       # Right Shift  
+    29: "ctrl",        # Left or Right Ctrl — both report scan 29, indistinguishable (see extended_keys.py)
+    97: "right ctrl",  # Right Ctrl (only reported distinctly on some systems)
+    56: "alt",         # Left Alt
+    100: "alt gr",     # Right Alt / AltGr
+    91: "left windows",   # Left Windows
+    92: "right windows",  # Right Windows
+    93: "application",    # Application / Menu key
     
     # Common special keys that might be localized
     1: "esc",
@@ -566,12 +574,19 @@ class Macros(CTkScript):
             self._skip_next_wait = False
 
             action_type = "press" if is_press else "release"
-            
-            self._draft_actions.append({
-                "type": action_type, 
+
+            new_action = {
+                "type": action_type,
                 "scan_code": scan_code,
                 "key": _normalize_key_name(event)
-            })
+            }
+            # Dedicated nav-cluster key vs. the numpad acting as navigation
+            # (Num Lock off) share a scan code — only the dedicated key
+            # needs the extended flag on replay. See extended_keys.py.
+            if scan_code in _NAV_CLUSTER_SCAN_CODES and not getattr(event, "is_keypad", False):
+                new_action["extended"] = True
+
+            self._draft_actions.append(new_action)
 
             if not self._refresh_pending:
                 self._refresh_pending = True

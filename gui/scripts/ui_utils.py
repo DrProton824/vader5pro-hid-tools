@@ -645,6 +645,7 @@ class SelectableList:
 
 
 _MODIFIER_ORDER = ("Control", "Alt", "Shift", "Super")
+_CAPTURE_FINALIZE_DELAY_MS = 150  # idle gap after the last key event before finalizing a combo
 
 # Windows key keysym varies by system — "Super_L"/"Super_R" on some,
 # "Win_L"/"Win_R" or "Meta_L"/"Meta_R" on others. All aliases map to "Win".
@@ -683,9 +684,16 @@ def _hotkey_sort_key(keysym: str):
 
 
 def bind_hotkey_capture(window, entry, on_captured=None) -> None:
-    """Live hotkey combo capture: click to start, keys fill as held, capture ends when released.
-    Keys render in fixed Ctrl+Alt+Shift+Key order. Fires `on_captured(text)` when done."""
-    state = {"active": False, "held": set(), "peak": set()}
+    """Live hotkey combo capture: click to start, keys fill as held, capture ends
+    _CAPTURE_FINALIZE_DELAY_MS after the last key event once nothing is held.
+    Fires `on_captured(text)` when done.
+
+    Finalizing on a short idle gap (rather than the instant `held` hits zero)
+    tolerates a single dropped or reordered KeyRelease — a fast press+release
+    can otherwise leave `held` never fully clearing, silently freezing capture
+    until the field is re-armed and tried again more slowly.
+    """
+    state = {"active": False, "held": set(), "peak": set(), "finalize_job": None}
 
     def _render() -> str:
         return "+".join(_hotkey_label(k) for k in sorted(state["peak"], key=_hotkey_sort_key))
@@ -694,10 +702,33 @@ def bind_hotkey_capture(window, entry, on_captured=None) -> None:
         entry.delete(0, "end")
         entry.insert(0, _render())
 
+    def _cancel_finalize() -> None:
+        if state["finalize_job"] is not None:
+            window.after_cancel(state["finalize_job"])
+            state["finalize_job"] = None
+
+    def _finalize() -> None:
+        state["finalize_job"] = None
+        if not state["active"] or not state["peak"]:
+            return
+        state["active"] = False
+        # Use on_captured when the field has no separate Save button and needs to persist immediately
+        # (mapping.py does this; profiles.py doesn't, since fcpeh_save reads the entry directly).
+        if on_captured:
+            on_captured(_render())
+        # Release focus once captured so arrow keys/Backspace/Delete
+        # can't then edit the result as ordinary text.
+        window.focus_set()
+
+    def _schedule_finalize() -> None:
+        _cancel_finalize()
+        state["finalize_job"] = window.after(_CAPTURE_FINALIZE_DELAY_MS, _finalize)
+
     # held/peak sets prevent a key released and pressed again mid-combo from appearing twice.
     def _on_press(event):
         if not state["active"]:
             return "break"  # focused without a click (e.g. pre-filled for editing) — stay read-only
+        _cancel_finalize()  # another key joined the combo — not done yet
         state["held"].add(event.keysym)
         state["peak"].add(event.keysym)
         _update_entry()
@@ -707,19 +738,12 @@ def bind_hotkey_capture(window, entry, on_captured=None) -> None:
         if not state["active"]:
             return None
         state["held"].discard(event.keysym)
-        if not state["held"] and state["peak"]:
-            state["active"] = False
-            # Use on_captured when the field has no separate Save button and needs to persist immediately
-            # (mapping.py does this; profiles.py doesn't, since fcpeh_save reads the entry directly).
-            if on_captured:
-                text = _render()
-                window.after(0, lambda: on_captured(text))
-            # Release focus once captured so arrow keys/Backspace/Delete
-            # can't then edit the result as ordinary text.
-            window.after(0, window.focus_set)
+        if not state["held"]:
+            _schedule_finalize()
         return "break"
 
     def _start(_event=None) -> None:
+        _cancel_finalize()
         state["active"] = True
         state["held"] = set()
         state["peak"] = set()
@@ -752,16 +776,37 @@ try:
 except ImportError:
     _keyboard = None
 
+# Scan codes the `keyboard` library's key_to_scan_codes() can return an
+# extended-prefixed artifact for instead of the plain byte macro playback
+# expects (e.g. 57435 for "left windows" instead of 91). Same source of
+# truth as service/mapping/extended_keys.py's ALWAYS_EXTENDED | NAV_CLUSTER
+# — checked first, before ever asking the library for these names.
+_KNOWN_SCAN_CODES = {
+    "left windows": 91, "right windows": 92, "application": 93,
+    "home": 71, "up": 72, "pageup": 73, "left": 75, "right": 77,
+    "end": 79, "down": 80, "pagedown": 81, "insert": 82, "delete": 83,
+}
+
+# Scan codes that need "extended": true on the resulting action — same set
+# as service/mapping/extended_keys.py's ALWAYS_EXTENDED | NAV_CLUSTER. A key
+# typed here always means the dedicated key, never the numpad substitute, so
+# unlike macros.py's live recorder there's no ambiguity to check for.
+_EXTENDED_SCAN_CODES = {71, 72, 73, 75, 77, 79, 80, 81, 82, 83, 91, 92, 93}
+
 
 def _resolve_scan_code(label: str) -> int | None:
     """Translate a captured key label to the same hardware scan code
     `keyboard.hook()` reports during recording (macros.py's _on_key_event).
-    Scan codes must come from the `keyboard` library's own table.
+    _KNOWN_SCAN_CODES is checked first — see its comment for why. Anything
+    else falls back to the `keyboard` library's own table.
     """
+    name = label.lower()
+    if name in _KNOWN_SCAN_CODES:
+        return _KNOWN_SCAN_CODES[name]
     if _keyboard is None:
         return None
     try:
-        codes = _keyboard.key_to_scan_codes(label.lower())
+        codes = _keyboard.key_to_scan_codes(name)
         return codes[0] if codes else None
     except (ValueError, KeyError):
         return None
@@ -913,10 +958,12 @@ def open_macro_action_editor(window, action=None):
         initial_mode = "delay" if action["type"] == "wait" else action["type"]
         initial_value = str(action["ms"]) if initial_mode == "delay" else str(action.get("key", ""))
         initial_scan_code = action.get("scan_code") if initial_mode != "delay" else None
+        initial_extended = action.get("extended", False) if initial_mode != "delay" else False
     else:
         initial_mode = "press"
         initial_value = ""
         initial_scan_code = None
+        initial_extended = False
 
     result = {"action": None}
     state = {"mode": initial_mode}
@@ -994,6 +1041,7 @@ def open_macro_action_editor(window, action=None):
         entry.place(x=0, y=0, relwidth=1, relheight=1)
         entry._is_placeholder = False
         entry._scan_code = None
+        entry._extended = False
         entries[mode] = entry
 
         if mode == "delay":
@@ -1001,6 +1049,7 @@ def open_macro_action_editor(window, action=None):
         else:
             def _capture_macro_key(label, scan_code, _entry=entry):
                 _entry._scan_code = scan_code
+                _entry._extended = scan_code in _EXTENDED_SCAN_CODES
 
             arm_fns[mode] = bind_single_key_capture(
                 dialog,
@@ -1042,8 +1091,12 @@ def open_macro_action_editor(window, action=None):
 
             if scan_code is not None:
                 new_action["scan_code"] = scan_code
+                if getattr(entry, "_extended", False):
+                    new_action["extended"] = True
             elif mode == initial_mode and value == initial_value and initial_scan_code is not None:
                 new_action["scan_code"] = initial_scan_code
+                if initial_extended:
+                    new_action["extended"] = True
 
             result["action"] = new_action
         dialog.destroy()

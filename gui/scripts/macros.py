@@ -93,8 +93,8 @@ SCAN_CODE_TO_NAME = {
     # Modifiers
     42: "shift",       # Left Shift
     54: "shift",       # Right Shift  
-    29: "ctrl",        # Left Ctrl
-    97: "ctrl",       # Right Ctrl
+    29: "left ctrl",   # Left Ctrl
+    97: "right ctrl",  # Right Ctrl
     56: "alt",         # Left Alt
     100: "alt gr",     # Right Alt / AltGr
     

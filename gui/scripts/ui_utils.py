@@ -646,16 +646,24 @@ class SelectableList:
 
 _MODIFIER_ORDER = ("Control", "Alt", "Shift", "Super")
 
+# Windows key keysym varies by system — "Super_L"/"Super_R" on some,
+# "Win_L"/"Win_R" or "Meta_L"/"Meta_R" on others. All aliases map to "Win".
 _KEYSYM_LABELS = {
     "Control_L": "Ctrl", "Control_R": "Ctrl",
     "Alt_L": "Alt", "Alt_R": "Alt",
     "Shift_L": "Shift", "Shift_R": "Shift",
     "Super_L": "Win", "Super_R": "Win",
+    "Win_L": "Win", "Win_R": "Win",
+    "Meta_L": "Win", "Meta_R": "Win",
     "Escape": "Esc", "Return": "Enter", "space": "Space",
     "Left": "Left", "Right": "Right", "Up": "Up", "Down": "Down",
     "Delete": "Delete", "BackSpace": "Backspace", "Tab": "Tab",
     "Prior": "PageUp", "Next": "PageDown", "Home": "Home", "End": "End",
 }
+
+# Sorts the Win_L/Meta_L aliases above into the same bucket as Super
+# so modifier ordering stays correct regardless of spelling used.
+_MODIFIER_BASE_ALIASES = {"Win": "Super", "Meta": "Super"}
 
 
 def _hotkey_label(keysym: str) -> str:
@@ -668,6 +676,7 @@ def _hotkey_label(keysym: str) -> str:
 
 def _hotkey_sort_key(keysym: str):
     base = keysym.split("_")[0]
+    base = _MODIFIER_BASE_ALIASES.get(base, base)
     if base in _MODIFIER_ORDER:
         return (_MODIFIER_ORDER.index(base), "")
     return (len(_MODIFIER_ORDER), _hotkey_label(keysym))
@@ -761,11 +770,26 @@ def _resolve_scan_code(label: str) -> int | None:
 def bind_single_key_capture(window, entry, on_captured=None):
     """Single physical key capture for macro press/release fields.
     Returns `arm(placeholder)` function to start capture. entry._is_placeholder tracks hint vs confirmed value."""
+    # Same Win_L/Win_R/Meta_L/Meta_R aliases as _KEYSYM_LABELS above.
     _MODIFIER_KEYSYMS = {
         "Shift_L", "Shift_R",
         "Control_L", "Control_R",
         "Alt_L", "Alt_R",
         "Super_L", "Super_R",
+        "Win_L", "Win_R",
+        "Meta_L", "Meta_R",
+    }
+
+    # Distinct left/right labels, unlike the shared _KEYSYM_LABELS table
+    # (which collapses left/right for keybind chords) — a recorded macro
+    # action needs the distinction to resolve the correct scan code.
+    _MODIFIER_KEY_LABELS = {
+        "Shift_L": "left shift", "Shift_R": "right shift",
+        "Control_L": "left ctrl", "Control_R": "right ctrl",
+        "Alt_L": "left alt", "Alt_R": "right alt",
+        "Super_L": "left windows", "Super_R": "right windows",
+        "Win_L": "left windows", "Win_R": "right windows",
+        "Meta_L": "left windows", "Meta_R": "right windows",
     }
 
     state = {
@@ -780,7 +804,7 @@ def bind_single_key_capture(window, entry, on_captured=None):
     # that display with the resolved character (from event.char, not keysym) and ends capture.
 
     def _render_held() -> str:
-        return "+".join(_hotkey_label(k) for k in state["peak"])
+        return "+".join(_MODIFIER_KEY_LABELS.get(k, _hotkey_label(k)) for k in state["peak"])
 
     def _update_live_display() -> None:
         entry.configure(placeholder_text="", text_color=state["normal_color"])
@@ -832,7 +856,7 @@ def bind_single_key_capture(window, entry, on_captured=None):
             # If all modifiers release without another key, capture that modifier alone
             # (e.g. a standalone "press Shift" action). If multiple were held, capture the first.
             if not state["held"] and state["peak"]:
-                modifier_label = _hotkey_label(state["peak"][0])
+                modifier_label = _MODIFIER_KEY_LABELS.get(state["peak"][0], _hotkey_label(state["peak"][0]))
                 _finalize(modifier_label, _resolve_scan_code(modifier_label))
             return "break"
         return None

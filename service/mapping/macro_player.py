@@ -12,12 +12,13 @@ second name-to-VK table that would have to agree with keyboard's naming
 exactly — each action is just replayed with the same scan code it was
 captured with.
 
-Known limitation
-────────────────
-The recorder does not currently store whether a key was an extended key
-(arrow cluster, navigation cluster, right-side Ctrl/Alt, ...), so those
-are replayed without KEYEVENTF_EXTENDEDKEY and may not register correctly.
-Regular letters, digits, F-keys and left-side modifiers are unaffected.
+Extended keys (Windows, right-side Ctrl/Alt, navigation cluster)
+──────────────────────────────────────────────────────────────────
+Those don't replay correctly via raw scan code alone (see
+extended_keys.py for why). SCAN_CODE_TO_VK maps the affected scan codes
+to the correct Virtual-Key code and is sent via VK + KEYEVENTF_EXTENDEDKEY
+instead. Every other key still replays by scan code exactly as before —
+that's what keeps this layout-independent.
 
 Threading
 ─────────
@@ -34,6 +35,13 @@ re-parsed per press) is never played more than once concurrently — a
 repress while it's still running is dropped. This avoids two copies of
 the same macro racing each other and stomping on shared keys (e.g. both
 holding/releasing "shift" out of sync with one another).
+
+Stuck-key safety net
+─────────────────────
+If playback stops mid-sequence (exception, a future cancel path, ...)
+while a key is still logically "held," that key is force-released in
+`finally` — otherwise it can end up physically stuck down system-wide
+until the user happens to tap that exact key themselves.
 """
 
 from __future__ import annotations
@@ -41,9 +49,10 @@ from __future__ import annotations
 import ctypes
 import threading
 import time
-from typing import Any
+from typing import Any, Optional
 
-from .input_sender import INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP
+from .input_sender import INPUT, INPUT_KEYBOARD, KEYBDINPUT, KEYEVENTF_KEYUP, KEYEVENTF_EXTENDEDKEY
+from .extended_keys import SCAN_CODE_TO_VK
 
 KEYEVENTF_SCANCODE = 0x0008
 
@@ -58,6 +67,18 @@ def _make_scancode_input(scan_code: int, key_up: bool) -> INPUT:
     flags = KEYEVENTF_SCANCODE | (KEYEVENTF_KEYUP if key_up else 0)
     inp = INPUT(type=INPUT_KEYBOARD)
     inp._input.ki = KEYBDINPUT(wVk=0, wScan=scan_code, dwFlags=flags)
+    return inp
+
+
+def _make_vk_input(vk: int, key_up: bool) -> INPUT:
+    # Every VK this is called with (see SCAN_CODE_TO_VK) is an extended
+    # key on real hardware. Windows doesn't infer that from the VK code
+    # alone — without KEYEVENTF_EXTENDEDKEY the E0 prefix bit is dropped,
+    # so right Ctrl/Alt can be indistinguishable from their left-side
+    # counterparts and the nav cluster can be read as numpad keys.
+    flags = KEYEVENTF_EXTENDEDKEY | (KEYEVENTF_KEYUP if key_up else 0)
+    inp = INPUT(type=INPUT_KEYBOARD)
+    inp._input.ki = KEYBDINPUT(wVk=vk, wScan=0, dwFlags=flags)
     return inp
 
 
@@ -88,6 +109,7 @@ class MacroPlayer:
         threading.Thread(target=self._run, args=(actions, macro_id), name="MacroPlayer", daemon=True).start()
 
     def _run(self, actions: list[dict[str, Any]], macro_id: int) -> None:
+        held: list[tuple[Optional[int], Optional[int]]] = []  # keys currently held: [(vk, scan_code), ...]
         try:
             for action in actions[:MAX_MACRO_ACTIONS]:
                 kind = action.get("type")
@@ -105,9 +127,34 @@ class MacroPlayer:
                 if not isinstance(scan_code, int):
                     continue
 
-                inp = _make_scancode_input(scan_code, key_up=(kind == "release"))
+                key_up = (kind == "release")
+                vk = SCAN_CODE_TO_VK.get(scan_code)
+
+                if vk is not None:
+                    inp = _make_vk_input(vk, key_up=key_up)
+                    token = (vk, None)
+                else:
+                    inp = _make_scancode_input(scan_code, key_up=key_up)
+                    token = (None, scan_code)
+
                 _SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT))
+
+                if key_up:
+                    if token in held:
+                        held.remove(token)
+                else:
+                    held.append(token)
         finally:
+            for vk, scan_code in held:
+                try:
+                    if vk is not None:
+                        inp = _make_vk_input(vk, key_up=True)
+                    else:
+                        inp = _make_scancode_input(scan_code, key_up=True)
+                    _SendInput(1, ctypes.byref(inp), ctypes.sizeof(INPUT))
+                except Exception:
+                    pass
+
             with self._lock:
                 self._active -= 1
                 self._active_macros.discard(macro_id)

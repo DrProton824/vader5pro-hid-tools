@@ -337,7 +337,12 @@ class Macros(CTkScript):
 
     def _refresh_macro_combobox(self) -> None:
         # Same pattern as profiles.py's fcgi_profile <-> fcpl_profilelist link.
-        names = [s["display_name"] for s in self._sessions.values() if s["saved"]]
+        # Use live list order instead of self._sessions (which reflects creation order).
+        names = [
+            self._sessions[k]["display_name"]
+            for k in self._macro_list.order
+            if k in self._sessions and self._sessions[k]["saved"]
+        ]
         self.window.fcgafsmm_combobox.configure(values=names)
 
     # --- fcmv_macrolist toolbar ---
@@ -379,6 +384,7 @@ class Macros(CTkScript):
     def _persist_macro_order(self, order: List[str]) -> None:
         saved_order = [k for k in order if self._sessions[k]["saved"]]
         _set_macro_order([self._sessions[k]["display_name"] for k in saved_order])
+        self._refresh_macro_combobox()
 
     def fcmevmnn_cancel1(self):
         if not self._navigation_guard():

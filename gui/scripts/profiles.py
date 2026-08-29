@@ -384,8 +384,14 @@ class Profiles(CTkScript):
             self.window.fcpeenn_entry1.focus_set()
 
     def _refresh_mapping_combobox(self) -> None:
-        saved = [(sid, s["display_name"]) for sid, s in self._sessions.items() if s["saved"]]
-        saved.sort(key=lambda item: item[0] != DEFAULT_PROFILE_ID)  # Default always first
+        # Use the live list order (already correct after drag/add/delete)
+        # rather than re-reading disk, which may lag or require a separate read.
+        saved = [
+            (sid, self._sessions[sid]["display_name"])
+            for sid in self._profile_list.order
+            if sid in self._sessions and self._sessions[sid]["saved"]
+        ]
+
         self._profile_id_by_name = {name: sid for sid, name in saved}
         self.window.fcgi_profile.configure(values=[name for _, name in saved])
         _color_dropdown_entry(
@@ -442,6 +448,7 @@ class Profiles(CTkScript):
     def _persist_profile_order(self, order: List[str]) -> None:
         saved_order = [k for k in order if self._sessions[k]["saved"]]
         _set_profile_order(saved_order)
+        self._refresh_mapping_combobox()
 
     # --- profile edit panel ---
 

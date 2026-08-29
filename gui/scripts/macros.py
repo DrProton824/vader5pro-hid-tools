@@ -91,12 +91,14 @@ RECORD_REFRESH_THROTTLE_MS = 120  # coalesces bursts of key events (auto-repeat)
 
 SCAN_CODE_TO_NAME = {
     # Modifiers
-    42: "shift",       # Left Shift
-    54: "shift",       # Right Shift  
-    29: "left ctrl",   # Left Ctrl
-    97: "right ctrl",  # Right Ctrl
-    56: "alt",         # Left Alt
-    100: "alt gr",     # Right Alt / AltGr
+    42: "shift",           # Left Shift
+    54: "shift",           # Right Shift  
+    29: "left ctrl",       # Left Ctrl
+    97: "right ctrl",      # Right Ctrl
+    91: "left windows",    # Left Windows
+    92: "right windows",   # Right Windows
+    56: "alt",             # Left Alt
+    100: "alt gr",         # Right Alt / AltGr
     
     # Common special keys that might be localized
     1: "esc",

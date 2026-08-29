@@ -26,6 +26,8 @@ Changes made since the latest release that will be included in the next version.
   (service/automation/foreground_watcher.py, shared/config.py)
 - Fixed the macro action list showing leftover empty scroll space after switching to a macro with fewer actions. 
   (gui/scripts/macros.py, gui/scripts/ui_utils.py)
+- Fixed macro and profile dropdowns not reflecting the order defined in their corresponding list. Dropdowns now update immediately after drag-reordering.
+  (gui/scripts/macros.py, gui/scripts/profiles.py)
 - Fixed an issue where double-clicking or editing the currently open macro/profile could discard unsaved changes by reloading the last-saved state. 
   (gui/scripts/macros.py, gui/scripts/profiles.py)
 - Fixed the Windows key, right Ctrl, right Alt, and navigation keys (arrows, Home/End, Page Up/Down, Insert/Delete) not being sent correctly by macros and not being capturable as keybinds.

@@ -784,11 +784,6 @@ def bind_hotkey_capture(window, entry, on_captured=None) -> None:
     entry.bind("<KeyPress>", _on_press)
     entry.bind("<KeyRelease>", _on_release)
     entry.bind("<FocusOut>", _on_focus_out)  # finalizes on OS-level focus steal
-    for sequence in ("<Tab>", "<Shift-Tab>"):
-        try:
-            entry.bind(sequence, _swallow_navigation, add="+")
-        except tk.TclError:
-            pass
 
 
 try:
@@ -952,11 +947,6 @@ def bind_single_key_capture(window, entry, on_captured=None):
     entry.bind("<Button-1>", lambda e: arm())
     entry.bind("<KeyPress>", _on_press)
     entry.bind("<KeyRelease>", _on_release)
-    for sequence in ("<Tab>", "<Shift-Tab>"):
-        try:
-            entry.bind(sequence, _swallow_navigation, add="+")
-        except tk.TclError:
-            pass
 
     return arm
 

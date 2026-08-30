@@ -60,23 +60,46 @@ except AttributeError:
 
 def _signal_existing_instance() -> None:
     """Send the raise signal to the first instance's named pipe.
-
-    Best-effort: if pywin32 isn't available or the pipe isn't ready
-    yet, this silently does nothing and the second launch just exits.
+    Pure ctypes — no pywin32 dependency.
     """
+    GENERIC_WRITE     = 0x40000000
+    OPEN_EXISTING     = 3
+    INVALID_HANDLE    = ctypes.c_void_p(-1).value
+
+    kernel32 = ctypes.windll.kernel32
+
+    handle = kernel32.CreateFileW(
+        PIPE_NAME,
+        GENERIC_WRITE,
+        0,          # no sharing
+        None,       # default security
+        OPEN_EXISTING,
+        0,          # default attributes
+        None,       # no template
+    )
+
+    if handle == INVALID_HANDLE:
+        # Pipe not ready yet or first instance not listening — silently do nothing.
+        try:
+            with open("gui_single_instance.log", "a", encoding="utf-8") as f:
+                err = kernel32.GetLastError()
+                f.write(f"_signal_existing_instance: CreateFileW failed, error={err}\n")
+        except Exception:
+            pass
+        return
+
     try:
-        import win32file  # type: ignore
-        handle = win32file.CreateFile(
-            PIPE_NAME,
-            win32file.GENERIC_WRITE,
-            0, None,
-            win32file.OPEN_EXISTING,
-            0, None,
+        data     = RAISE_SIGNAL
+        written  = ctypes.c_ulong(0)
+        kernel32.WriteFile(
+            handle,
+            data,
+            len(data),
+            ctypes.byref(written),
+            None,
         )
-        win32file.WriteFile(handle, RAISE_SIGNAL)
-        win32file.CloseHandle(handle)
-    except Exception:
-        pass
+    finally:
+        kernel32.CloseHandle(handle)
 
 
 # ---------------------------------------------------------------------------
